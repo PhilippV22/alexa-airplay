@@ -373,6 +373,10 @@ export function mainPageHtml(adminUser: string): string {
 
     <section style="grid-column: 1 / -1;">
       <h2>Targets</h2>
+      <div class="row" style="margin-bottom: 8px;">
+        <button class="success" id="import-alexa-devices">Alexa Devices importieren</button>
+      </div>
+      <p class="msg" id="import-message"></p>
       <table>
         <thead>
           <tr>
@@ -419,6 +423,8 @@ export function mainPageHtml(adminUser: string): string {
       AIRBRIDGE_FFMPEG_BIN: 'cfg-ffmpeg-bin'
     };
     var alexaWizardPollTimer = null;
+    var alexaAutoImportAttempted = false;
+    var alexaImportInFlight = false;
 
     function setMessage(id, text, isError, isSuccess) {
       var el = document.getElementById(id);
@@ -781,7 +787,66 @@ export function mainPageHtml(adminUser: string): string {
       }, 5000);
     }
 
-    async function refreshRuntimeTables() {
+    async function importAlexaDevices(silent) {
+      if (alexaImportInFlight) {
+        return;
+      }
+      alexaImportInFlight = true;
+
+      if (!silent) {
+        setMessage('import-message', 'Importiere Alexa Devices ...');
+      }
+
+      try {
+        var res = await api('/api/targets/import/alexa-devices', {
+          method: 'POST',
+          body: JSON.stringify({ enabled: true })
+        });
+        var body = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          if (!silent) {
+            setMessage('import-message', body.message || 'Import fehlgeschlagen', true, false);
+          }
+          return;
+        }
+
+        setMessage(
+          'import-message',
+          'Import abgeschlossen: ' + body.created + ' neu, ' + body.skipped + ' bereits vorhanden, ' + body.discovered + ' gefunden.',
+          false,
+          true
+        );
+        await refreshRuntimeTables(true);
+      } finally {
+        alexaImportInFlight = false;
+      }
+    }
+
+    async function maybeAutoImportAlexaDevices(targetsBody) {
+      if (alexaAutoImportAttempted) {
+        return false;
+      }
+
+      var targets = targetsBody.targets || [];
+      var hasDeviceTargets = targets.some(function (target) {
+        return target.type === 'device';
+      });
+      if (hasDeviceTargets) {
+        alexaAutoImportAttempted = true;
+        return false;
+      }
+
+      var alexaInfo = targetsBody.alexa || {};
+      if (alexaInfo.mode !== 'alexa_remote2' || !alexaInfo.initialized) {
+        return false;
+      }
+
+      alexaAutoImportAttempted = true;
+      await importAlexaDevices(true);
+      return true;
+    }
+
+    async function refreshRuntimeTables(skipAutoImport) {
       var responses = await Promise.all([
         api('/api/targets'),
         api('/api/sessions'),
@@ -791,6 +856,13 @@ export function mainPageHtml(adminUser: string): string {
       var targetsBody = await responses[0].json();
       var sessionsBody = await responses[1].json();
       var auditBody = await responses[2].json();
+
+      if (!skipAutoImport) {
+        var imported = await maybeAutoImportAlexaDevices(targetsBody);
+        if (imported) {
+          return;
+        }
+      }
 
       var targetsEl = document.getElementById('targets');
       targetsEl.innerHTML = '';
@@ -977,6 +1049,12 @@ export function mainPageHtml(adminUser: string): string {
     document.getElementById('create').onclick = function () {
       createTarget().catch(function (error) {
         setMessage('create-error', error.message || 'Fehler beim Erstellen', true, false);
+      });
+    };
+
+    document.getElementById('import-alexa-devices').onclick = function () {
+      importAlexaDevices(false).catch(function (error) {
+        setMessage('import-message', error.message || 'Import fehlgeschlagen', true, false);
       });
     };
 

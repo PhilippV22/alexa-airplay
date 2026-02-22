@@ -6,6 +6,12 @@ interface InvokeError extends Error {
   code?: string;
 }
 
+export interface AlexaDeviceSummary {
+  serialNumber: string;
+  name: string;
+  deviceFamily: string;
+}
+
 function codeError(code: string, message: string): InvokeError {
   const err = new Error(message) as InvokeError;
   err.code = code;
@@ -102,6 +108,78 @@ export class AlexaAdapter {
     });
 
     void streamUrl;
+  }
+
+  async listDevices(): Promise<AlexaDeviceSummary[]> {
+    if (this.mode === "mock") {
+      return [];
+    }
+
+    if (!this.initialized || !this.remote) {
+      throw codeError("ALEXA_AUTH_FAILED", "Alexa adapter is not initialized");
+    }
+
+    const remote = this.remote as unknown as {
+      getDevices: (callback: (err: Error | null | undefined, devices: unknown) => void) => void;
+    };
+
+    const rawDevices = await new Promise<unknown>((resolve, reject) => {
+      remote.getDevices((err: Error | null | undefined, devices: unknown) => {
+        if (err) {
+          reject(codeError("ALEXA_INVOKE_FAILED", err.message));
+          return;
+        }
+        resolve(devices);
+      });
+    });
+
+    const list = Array.isArray(rawDevices)
+      ? rawDevices
+      : rawDevices && typeof rawDevices === "object"
+        ? Object.values(rawDevices as Record<string, unknown>)
+        : [];
+
+    const seen = new Set<string>();
+    const summaries: AlexaDeviceSummary[] = [];
+
+    for (const entry of list) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+
+      const candidate = entry as Record<string, unknown>;
+      const serialRaw = candidate.serialNumber;
+      if (typeof serialRaw !== "string") {
+        continue;
+      }
+
+      const serialNumber = serialRaw.trim();
+      if (!serialNumber || seen.has(serialNumber)) {
+        continue;
+      }
+      seen.add(serialNumber);
+
+      const accountName =
+        typeof candidate.accountName === "string" ? candidate.accountName.trim() : "";
+      const friendlyName =
+        typeof candidate.deviceTypeFriendlyName === "string"
+          ? candidate.deviceTypeFriendlyName.trim()
+          : "";
+      const deviceFamily =
+        typeof candidate.deviceFamily === "string" ? candidate.deviceFamily.trim() : "unknown";
+
+      const name =
+        accountName || friendlyName || `Alexa ${serialNumber.slice(Math.max(0, serialNumber.length - 6))}`;
+
+      summaries.push({
+        serialNumber,
+        name,
+        deviceFamily,
+      });
+    }
+
+    summaries.sort((a, b) => a.name.localeCompare(b.name));
+    return summaries;
   }
 
   isInitialized(): boolean {

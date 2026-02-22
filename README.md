@@ -19,6 +19,7 @@ Die Web-UI kann jetzt das komplette Setup erledigen:
 - Cloudflared-Konfiguration bearbeiten
 - AirBridge-Neustart direkt aus der Web-UI anstossen
 - Targets/Sessions/Audit weiterhin komplett verwalten
+- Alexa Devices Import: alle Geraete aus dem Alexa-Account als Targets uebernehmen
 
 ## Architektur
 
@@ -106,6 +107,7 @@ Setup:
 Runtime:
 
 - `GET /api/targets`
+- `POST /api/targets/import/alexa-devices`
 - `POST /api/targets`
 - `PATCH /api/targets/:id`
 - `DELETE /api/targets/:id`

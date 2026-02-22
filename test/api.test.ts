@@ -112,6 +112,22 @@ describe("airbridge api", () => {
     expect(updated.body.error).toBe("GROUP_NATIVE_UNSUPPORTED");
   });
 
+  it("supports alexa device import endpoint", async () => {
+    const agent = request.agent(bundle.app);
+
+    await agent
+      .post("/api/auth/login")
+      .send({ username: "admin", password: "test-password" })
+      .expect(200);
+
+    const res = await agent.post("/api/targets/import/alexa-devices").send({ enabled: true });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(typeof res.body.discovered).toBe("number");
+    expect(typeof res.body.created).toBe("number");
+    expect(typeof res.body.skipped).toBe("number");
+  });
+
   it("writes setup config and persists it to setup env file", async () => {
     const agent = request.agent(bundle.app);
 

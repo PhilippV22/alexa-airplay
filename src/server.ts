@@ -66,6 +66,10 @@ const setupApplySchema = z.object({
   restart: z.boolean().optional(),
 });
 
+const importAlexaTargetsSchema = z.object({
+  enabled: z.boolean().optional(),
+});
+
 const setupAlexaCookieWizardStartSchema = z.object({
   amazonPage: z.string().min(3).optional(),
   baseAmazonPage: z.string().min(3).optional(),
@@ -103,6 +107,22 @@ function sanitizeFile(fileName: string): string | null {
     return null;
   }
   return fileName;
+}
+
+function uniqueAirplayName(base: string, usedNames: Set<string>): string {
+  let candidate = base;
+  let suffix = 2;
+  while (usedNames.has(candidate)) {
+    candidate = `${base} (${suffix})`;
+    suffix += 1;
+  }
+  usedNames.add(candidate);
+  return candidate;
+}
+
+function normalizeTargetName(input: string): string {
+  const trimmed = input.trim();
+  return trimmed || "Alexa Device";
 }
 
 function inferBaseAmazonPage(amazonPage: string): string {
@@ -546,7 +566,75 @@ export async function createApp(): Promise<AppBundle> {
     res.json({
       targets,
       processInfo,
+      alexa: {
+        initialized: alexaAdapter.isInitialized(),
+        mode: config.alexaInvokeMode,
+      },
     });
+  });
+
+  api.post("/targets/import/alexa-devices", async (req, res, next) => {
+    try {
+      const body = importAlexaTargetsSchema.parse(req.body ?? {});
+      const importEnabled = body.enabled ?? true;
+
+      const discoveredDevices = await alexaAdapter.listDevices();
+      const existingTargets = store.listTargets();
+      const existingByDeviceId = new Map<string, Target>();
+      const usedAirplayNames = new Set<string>(existingTargets.map((target) => target.airplay_name));
+
+      for (const target of existingTargets) {
+        if (target.type !== "device" || !target.alexa_device_id) {
+          continue;
+        }
+        existingByDeviceId.set(target.alexa_device_id, target);
+      }
+
+      const created: Target[] = [];
+      let skipped = 0;
+
+      for (const device of discoveredDevices) {
+        if (existingByDeviceId.has(device.serialNumber)) {
+          skipped += 1;
+          continue;
+        }
+
+        const targetName = normalizeTargetName(device.name);
+        const target = store.createTarget({
+          name: targetName,
+          type: "device",
+          alexa_device_id: device.serialNumber,
+          enabled: importEnabled,
+          airplay_name: uniqueAirplayName(`AirBridge ${targetName}`, usedAirplayNames),
+        });
+        created.push(target);
+      }
+
+      if (created.length > 0 && importEnabled) {
+        await reconcileTargets(safeActor(req));
+      }
+
+      store.addAudit(safeActor(req), "targets.import_alexa_devices", null, "success", {
+        discovered: discoveredDevices.length,
+        created: created.length,
+        skipped,
+        importEnabled,
+      });
+
+      res.json({
+        ok: true,
+        discovered: discoveredDevices.length,
+        created: created.length,
+        skipped,
+        importEnabled,
+        targets: created,
+      });
+    } catch (error) {
+      store.addAudit(safeActor(req), "targets.import_alexa_devices", null, "failure", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      next(error);
+    }
   });
 
   api.post("/targets", async (req, res, next) => {
