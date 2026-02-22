@@ -91,6 +91,17 @@ Wichtige Skill-Invoke-Umgebungsvariablen:
 - `AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS` (optionale Prefixe, `|`-getrennt)
 - `AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS` (Default: `6`)
 - `AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT` (Default: `2`)
+- `AIRBRIDGE_SKILL_APP_ID` (Skill-ID aus Alexa Developer Console, empfohlen)
+
+Direkter Skill-Endpoint-Check:
+
+```bash
+./scripts/check-skill-endpoint.sh \
+  --url https://skill.<deine-domain>/alexa/skill \
+  --app-id amzn1.ask.skill.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+```
+
+Der Check sendet einen `LaunchRequest` und erwartet `HTTP 200` sowie eine valide Alexa-Response.
 
 Troubleshooting:
 

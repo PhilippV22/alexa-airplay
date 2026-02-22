@@ -385,7 +385,7 @@ export async function createApp(): Promise<AppBundle> {
 
   app.use(
     createSkillRouter({
-      appId: process.env.AIRBRIDGE_SKILL_APP_ID,
+      appId: config.skillAppId,
       resolveToken: (token) => playback.resolveSessionToken(token),
       onSkillInvoke: (targetId, token, result, reason) => {
         if (result === "success" && targetId > 0) {

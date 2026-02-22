@@ -71,6 +71,7 @@ export const config = {
   alexaInvocationPrefixFallbacks: process.env.AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS ?? "",
   alexaSkillInvokeTimeoutSeconds: envInt("AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS", 6),
   alexaSkillInvokeRetryCount: envInt("AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT", 2),
+  skillAppId: process.env.AIRBRIDGE_SKILL_APP_ID,
   alexaInitTimeoutSeconds: envInt("AIRBRIDGE_ALEXA_INIT_TIMEOUT_SECONDS", 60),
   spawnProcesses: envBool("AIRBRIDGE_SPAWN_PROCESSES", true),
   hlsSegmentSeconds: envInt("AIRBRIDGE_HLS_SEGMENT_SECONDS", 2),

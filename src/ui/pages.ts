@@ -273,6 +273,9 @@ export function mainPageHtml(adminUser: string): string {
         <label>Skill Invoke Retry Count
           <input id="cfg-skill-retries" placeholder="2" />
         </label>
+        <label>Alexa Skill App ID
+          <input id="cfg-skill-app-id" placeholder="amzn1.ask.skill.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        </label>
         <label>Session Secret
           <input id="cfg-session-secret" placeholder="long random secret" />
         </label>
@@ -432,6 +435,7 @@ export function mainPageHtml(adminUser: string): string {
       AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS: 'cfg-prefix-fallbacks',
       AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS: 'cfg-skill-timeout',
       AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT: 'cfg-skill-retries',
+      AIRBRIDGE_SKILL_APP_ID: 'cfg-skill-app-id',
       AIRBRIDGE_SESSION_SECRET: 'cfg-session-secret',
       AIRBRIDGE_ADMIN_USER: 'cfg-admin-user',
       AIRBRIDGE_FFMPEG_BITRATE: 'cfg-ffmpeg-bitrate',

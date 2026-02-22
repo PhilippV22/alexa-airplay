@@ -31,6 +31,7 @@ describe("airbridge api", () => {
     process.env.AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS = "";
     process.env.AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS = "1";
     process.env.AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT = "0";
+    process.env.AIRBRIDGE_SKILL_APP_ID = "amzn1.ask.skill.test-app-id";
     process.env.AIRBRIDGE_SETUP_ENV_FILE = path.join(tmpRoot, "airbridge.env");
     process.env.AIRBRIDGE_SETUP_CLOUDFLARED_FILE = path.join(tmpRoot, "cloudflared.yml");
     process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE = path.join(tmpRoot, "alexa-cookie.txt");
@@ -63,6 +64,7 @@ describe("airbridge api", () => {
     delete process.env.AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS;
     delete process.env.AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS;
     delete process.env.AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT;
+    delete process.env.AIRBRIDGE_SKILL_APP_ID;
     delete process.env.AIRBRIDGE_SETUP_ENV_FILE;
     delete process.env.AIRBRIDGE_SETUP_CLOUDFLARED_FILE;
     delete process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE;
@@ -169,6 +171,11 @@ describe("airbridge api", () => {
     expect(activeSession.state).toBe("buffering");
 
     const skillRes = await request(bundle.app).post("/alexa/skill").send({
+      session: {
+        application: {
+          applicationId: "amzn1.ask.skill.test-app-id",
+        },
+      },
       request: {
         type: "IntentRequest",
         intent: {
@@ -193,6 +200,22 @@ describe("airbridge api", () => {
     expect(updated?.state).toBe("playing");
   });
 
+  it("rejects skill request when app id does not match", async () => {
+    const skillRes = await request(bundle.app).post("/alexa/skill").send({
+      session: {
+        application: {
+          applicationId: "amzn1.ask.skill.wrong-id",
+        },
+      },
+      request: {
+        type: "LaunchRequest",
+      },
+    });
+
+    expect(skillRes.status).toBe(403);
+    expect(skillRes.body.response?.outputSpeech?.text).toBe("Invalid application ID.");
+  });
+
   it("writes setup config and persists it to setup env file", async () => {
     const agent = request.agent(bundle.app);
 
@@ -210,6 +233,7 @@ describe("airbridge api", () => {
         AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS: "frage air bridge spiele token",
         AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS: 6,
         AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT: 2,
+        AIRBRIDGE_SKILL_APP_ID: "amzn1.ask.skill.test-app-id",
       },
     });
 
@@ -223,6 +247,7 @@ describe("airbridge api", () => {
     expect(setupConfigRes.body.values.AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS).toBe(
       "frage air bridge spiele token",
     );
+    expect(setupConfigRes.body.values.AIRBRIDGE_SKILL_APP_ID).toBe("amzn1.ask.skill.test-app-id");
 
     const envFile = fs.readFileSync(process.env.AIRBRIDGE_SETUP_ENV_FILE as string, "utf8");
     expect(envFile).toContain("AIRBRIDGE_STREAM_BASE_URL=https://updated.example.com");
@@ -233,6 +258,7 @@ describe("airbridge api", () => {
     );
     expect(envFile).toContain("AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS=6");
     expect(envFile).toContain("AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT=2");
+    expect(envFile).toContain("AIRBRIDGE_SKILL_APP_ID=amzn1.ask.skill.test-app-id");
   });
 
   it("updates admin password as hash via setup endpoint", async () => {
