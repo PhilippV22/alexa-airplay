@@ -8,6 +8,13 @@ interface SkillRouterOptions {
 }
 
 interface AlexaRequestBody {
+  context?: {
+    System?: {
+      application?: {
+        applicationId?: string;
+      };
+    };
+  };
   session?: {
     application?: {
       applicationId?: string;
@@ -42,7 +49,9 @@ export function createSkillRouter(options: SkillRouterOptions): Router {
     const body = req.body as AlexaRequestBody;
 
     if (options.appId) {
-      const requestAppId = body.session?.application?.applicationId;
+      const requestAppId =
+        body.session?.application?.applicationId ??
+        body.context?.System?.application?.applicationId;
       if (requestAppId !== options.appId) {
         res.status(403).json(responseWithSpeech("Invalid application ID."));
         return;

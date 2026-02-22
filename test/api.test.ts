@@ -216,6 +216,24 @@ describe("airbridge api", () => {
     expect(skillRes.body.response?.outputSpeech?.text).toBe("Invalid application ID.");
   });
 
+  it("accepts skill request when app id is provided via context.system", async () => {
+    const skillRes = await request(bundle.app).post("/alexa/skill").send({
+      context: {
+        System: {
+          application: {
+            applicationId: "amzn1.ask.skill.test-app-id",
+          },
+        },
+      },
+      request: {
+        type: "LaunchRequest",
+      },
+    });
+
+    expect(skillRes.status).toBe(200);
+    expect(skillRes.body.response?.outputSpeech?.text).toContain("AirBridge ist bereit");
+  });
+
   it("writes setup config and persists it to setup env file", async () => {
     const agent = request.agent(bundle.app);
 
