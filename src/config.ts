@@ -66,6 +66,7 @@ export const config = {
   allowedLanCidrs: (process.env.AIRBRIDGE_ALLOWED_LAN_CIDRS ?? "").split(",").map((v) => v.trim()).filter(Boolean),
   alexaCookiePath: process.env.AIRBRIDGE_ALEXA_COOKIE_PATH,
   alexaInvokeMode: process.env.AIRBRIDGE_ALEXA_INVOKE_MODE ?? "mock",
+  alexaInitTimeoutSeconds: envInt("AIRBRIDGE_ALEXA_INIT_TIMEOUT_SECONDS", 20),
   spawnProcesses: envBool("AIRBRIDGE_SPAWN_PROCESSES", true),
   hlsSegmentSeconds: envInt("AIRBRIDGE_HLS_SEGMENT_SECONDS", 2),
   hlsListSize: envInt("AIRBRIDGE_HLS_LIST_SIZE", 6),

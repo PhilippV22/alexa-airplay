@@ -167,6 +167,7 @@ export async function createApp(): Promise<AppBundle> {
     mode: config.alexaInvokeMode,
     cookiePath: config.alexaCookiePath,
     invocationPrefix: process.env.AIRBRIDGE_ALEXA_INVOCATION_PREFIX,
+    initTimeoutMs: config.alexaInitTimeoutSeconds * 1000,
   });
 
   try {

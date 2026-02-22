@@ -255,6 +255,9 @@ export function mainPageHtml(adminUser: string): string {
             <option value="alexa_remote2">alexa_remote2</option>
           </select>
         </label>
+        <label>Alexa Init Timeout (Sek.)
+          <input id="cfg-alexa-init-timeout" placeholder="20" />
+        </label>
         <label>Alexa Invocation Prefix
           <input id="cfg-alexa-prefix" placeholder="open air bridge and play token" />
         </label>
@@ -407,6 +410,7 @@ export function mainPageHtml(adminUser: string): string {
       AIRBRIDGE_BIND_HOST: 'cfg-bind-host',
       AIRBRIDGE_PORT: 'cfg-port',
       AIRBRIDGE_ALEXA_INVOKE_MODE: 'cfg-alexa-mode',
+      AIRBRIDGE_ALEXA_INIT_TIMEOUT_SECONDS: 'cfg-alexa-init-timeout',
       AIRBRIDGE_ALEXA_INVOCATION_PREFIX: 'cfg-alexa-prefix',
       AIRBRIDGE_SESSION_SECRET: 'cfg-session-secret',
       AIRBRIDGE_ADMIN_USER: 'cfg-admin-user',

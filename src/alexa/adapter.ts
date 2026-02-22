@@ -16,13 +16,20 @@ export class AlexaAdapter {
   private readonly mode: string;
   private readonly cookiePath?: string;
   private readonly invocationPrefix: string;
+  private readonly initTimeoutMs: number;
   private remote: AlexaRemote | null = null;
   private initialized = false;
 
-  constructor(params: { mode: string; cookiePath?: string; invocationPrefix?: string }) {
+  constructor(params: {
+    mode: string;
+    cookiePath?: string;
+    invocationPrefix?: string;
+    initTimeoutMs?: number;
+  }) {
     this.mode = params.mode;
     this.cookiePath = params.cookiePath;
     this.invocationPrefix = params.invocationPrefix ?? "open air bridge and play token";
+    this.initTimeoutMs = params.initTimeoutMs ?? 15_000;
   }
 
   async init(): Promise<void> {
@@ -50,27 +57,14 @@ export class AlexaAdapter {
 
     this.remote = new AlexaRemote();
 
-    await new Promise<void>((resolve, reject) => {
-      this.remote?.init(
-        {
-          cookie: cookieContent,
-          proxyOnly: true,
-          bluetooth: false,
-          notifications: false,
-          useWsMqtt: true,
-          cookieRefreshInterval: 0,
-        },
-        (err: Error | null | undefined) => {
-          if (err) {
-            reject(codeError("ALEXA_AUTH_FAILED", err.message));
-            return;
-          }
-          resolve();
-        },
-      );
-    });
-
-    this.initialized = true;
+    try {
+      await this.initWithTimeout(cookieContent);
+      this.initialized = true;
+    } catch (error) {
+      this.remote = null;
+      this.initialized = false;
+      throw error;
+    }
   }
 
   async invokeStream(target: Target, streamToken: string, streamUrl: string): Promise<void> {
@@ -112,5 +106,42 @@ export class AlexaAdapter {
 
   isInitialized(): boolean {
     return this.initialized;
+  }
+
+  private async initWithTimeout(cookieContent: string): Promise<void> {
+    const initPromise = new Promise<void>((resolve, reject) => {
+      this.remote?.init(
+        {
+          cookie: cookieContent,
+          proxyOnly: true,
+          bluetooth: false,
+          notifications: false,
+          useWsMqtt: true,
+          cookieRefreshInterval: 0,
+        },
+        (err: Error | null | undefined) => {
+          if (err) {
+            reject(codeError("ALEXA_AUTH_FAILED", err.message));
+            return;
+          }
+          resolve();
+        },
+      );
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          codeError(
+            "ALEXA_AUTH_FAILED",
+            `Alexa adapter init timeout after ${this.initTimeoutMs}ms`,
+          ),
+        );
+      }, this.initTimeoutMs);
+      timer.unref();
+      initPromise.finally(() => clearTimeout(timer));
+    });
+
+    await Promise.race([initPromise, timeoutPromise]);
   }
 }
