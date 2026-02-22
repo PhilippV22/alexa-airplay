@@ -623,7 +623,15 @@ export async function createApp(): Promise<AppBundle> {
     try {
       const body = importAlexaTargetsSchema.parse(req.body ?? {});
       const importEnabled = body.enabled ?? true;
-      await ensureAlexaAdapterInitialized(safeActor(req), "targets.import_alexa_devices");
+      let initError: string | null = null;
+
+      if (config.alexaInvokeMode === "alexa_remote2" && !alexaAdapter.isInitialized()) {
+        try {
+          await ensureAlexaAdapterInitialized(safeActor(req), "targets.import_alexa_devices");
+        } catch (error) {
+          initError = error instanceof Error ? error.message : String(error);
+        }
+      }
 
       const discoveredDevices = await alexaAdapter.listDevices();
       const existingTargets = store.listTargets();
@@ -666,6 +674,7 @@ export async function createApp(): Promise<AppBundle> {
         created: created.length,
         skipped,
         importEnabled,
+        initError,
       });
 
       res.json({
@@ -674,6 +683,7 @@ export async function createApp(): Promise<AppBundle> {
         created: created.length,
         skipped,
         importEnabled,
+        initError,
         targets: created,
       });
     } catch (error) {

@@ -18,6 +18,48 @@ function codeError(code: string, message: string): InvokeError {
   return err;
 }
 
+function extractCsrf(cookieContent: string): string | null {
+  const match = cookieContent.match(/(?:^|;\s*)csrf=([^;]+)/i);
+  if (!match) {
+    return null;
+  }
+
+  const token = decodeURIComponent(match[1]).replace(/^"(.*)"$/, "$1").trim();
+  return token || null;
+}
+
+function inferAlexaHosts(cookieContent: string): string[] {
+  const hosts: string[] = [];
+
+  const marketHints: Array<{ pattern: RegExp; host: string }> = [
+    { pattern: /(?:^|;\s*)(?:at|sess-at|ubid|x)-acbde=/i, host: "alexa.amazon.de" },
+    { pattern: /(?:^|;\s*)(?:at|sess-at|ubid|x)-acbuk=/i, host: "alexa.amazon.co.uk" },
+    { pattern: /(?:^|;\s*)(?:at|sess-at|ubid|x)-acbfr=/i, host: "alexa.amazon.fr" },
+    { pattern: /(?:^|;\s*)(?:at|sess-at|ubid|x)-acbit=/i, host: "alexa.amazon.it" },
+    { pattern: /(?:^|;\s*)(?:at|sess-at|ubid|x)-acbes=/i, host: "alexa.amazon.es" },
+    { pattern: /(?:^|;\s*)(?:at|sess-at|ubid|x)-acbjp=/i, host: "alexa.amazon.co.jp" },
+    { pattern: /(?:^|;\s*)(?:at|sess-at|ubid|x)-main=/i, host: "alexa.amazon.com" },
+  ];
+
+  for (const hint of marketHints) {
+    if (hint.pattern.test(cookieContent)) {
+      hosts.push(hint.host);
+    }
+  }
+
+  hosts.push(
+    "alexa.amazon.com",
+    "alexa.amazon.de",
+    "alexa.amazon.co.uk",
+    "alexa.amazon.fr",
+    "alexa.amazon.it",
+    "alexa.amazon.es",
+    "alexa.amazon.co.jp",
+  );
+
+  return Array.from(new Set(hosts));
+}
+
 export class AlexaAdapter {
   private readonly mode: string;
   private readonly cookiePath?: string;
@@ -48,18 +90,7 @@ export class AlexaAdapter {
       throw codeError("ALEXA_AUTH_FAILED", `Unsupported Alexa mode: ${this.mode}`);
     }
 
-    if (!this.cookiePath) {
-      throw codeError("ALEXA_AUTH_FAILED", "AIRBRIDGE_ALEXA_COOKIE_PATH is required");
-    }
-
-    if (!fs.existsSync(this.cookiePath)) {
-      throw codeError("ALEXA_AUTH_FAILED", `Alexa cookie file not found: ${this.cookiePath}`);
-    }
-
-    const cookieContent = fs.readFileSync(this.cookiePath, "utf8").trim();
-    if (!cookieContent) {
-      throw codeError("ALEXA_AUTH_FAILED", "Alexa cookie file is empty");
-    }
+    const cookieContent = this.readCookieContent();
 
     this.remote = new AlexaRemote();
 
@@ -115,8 +146,46 @@ export class AlexaAdapter {
       return [];
     }
 
-    if (!this.initialized || !this.remote) {
-      throw codeError("ALEXA_AUTH_FAILED", "Alexa adapter is not initialized");
+    if (this.initialized && this.remote) {
+      try {
+        const rawDevices = await this.loadDevicesFromRemote();
+        const byRemote = this.normalizeDeviceList(rawDevices);
+        if (byRemote.length > 0) {
+          return byRemote;
+        }
+      } catch {
+        // Fall back to direct HTTP query with stored cookie.
+      }
+    }
+
+    const cookieContent = this.readCookieContent();
+    return this.loadDevicesFromHttp(cookieContent);
+  }
+
+  isInitialized(): boolean {
+    return this.initialized;
+  }
+
+  private readCookieContent(): string {
+    if (!this.cookiePath) {
+      throw codeError("ALEXA_AUTH_FAILED", "AIRBRIDGE_ALEXA_COOKIE_PATH is required");
+    }
+
+    if (!fs.existsSync(this.cookiePath)) {
+      throw codeError("ALEXA_AUTH_FAILED", `Alexa cookie file not found: ${this.cookiePath}`);
+    }
+
+    const cookieContent = fs.readFileSync(this.cookiePath, "utf8").trim();
+    if (!cookieContent) {
+      throw codeError("ALEXA_AUTH_FAILED", "Alexa cookie file is empty");
+    }
+
+    return cookieContent;
+  }
+
+  private async loadDevicesFromRemote(): Promise<unknown[]> {
+    if (!this.remote) {
+      throw codeError("ALEXA_AUTH_FAILED", "Alexa remote client is missing");
     }
 
     const remote = this.remote as unknown as {
@@ -133,16 +202,18 @@ export class AlexaAdapter {
       });
     });
 
-    const list = Array.isArray(rawDevices)
+    return Array.isArray(rawDevices)
       ? rawDevices
       : rawDevices && typeof rawDevices === "object"
         ? Object.values(rawDevices as Record<string, unknown>)
         : [];
+  }
 
+  private normalizeDeviceList(rawEntries: unknown[]): AlexaDeviceSummary[] {
     const seen = new Set<string>();
     const summaries: AlexaDeviceSummary[] = [];
 
-    for (const entry of list) {
+    for (const entry of rawEntries) {
       if (!entry || typeof entry !== "object") {
         continue;
       }
@@ -182,8 +253,87 @@ export class AlexaAdapter {
     return summaries;
   }
 
-  isInitialized(): boolean {
-    return this.initialized;
+  private async loadDevicesFromHttp(cookieContent: string): Promise<AlexaDeviceSummary[]> {
+    const csrf = extractCsrf(cookieContent);
+    if (!csrf) {
+      throw codeError("ALEXA_AUTH_FAILED", "Alexa cookie does not contain csrf token");
+    }
+
+    const hosts = inferAlexaHosts(cookieContent);
+    let lastError = "unknown error";
+
+    for (const host of hosts) {
+      try {
+        const entries = await this.fetchDeviceEntries(host, cookieContent, csrf);
+        const normalized = this.normalizeDeviceList(entries);
+        if (normalized.length > 0) {
+          return normalized;
+        }
+        lastError = `${host} returned no devices`;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    throw codeError("ALEXA_AUTH_FAILED", `Unable to fetch Alexa devices: ${lastError}`);
+  }
+
+  private async fetchDeviceEntries(
+    host: string,
+    cookieContent: string,
+    csrf: string,
+  ): Promise<unknown[]> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(this.initTimeoutMs, 15_000));
+    timer.unref();
+
+    try {
+      const response = await fetch(`https://${host}/api/devices-v2/device?cached=false`, {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          cookie: cookieContent,
+          csrf,
+          "x-csrf-token": csrf,
+          referer: `https://${host}/spa/index.html`,
+          origin: `https://${host}`,
+          "user-agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`${host} responded with status ${response.status}`);
+      }
+
+      const payload = (await response.json()) as unknown;
+      if (Array.isArray(payload)) {
+        return payload;
+      }
+      if (!payload || typeof payload !== "object") {
+        return [];
+      }
+
+      const record = payload as Record<string, unknown>;
+      if (Array.isArray(record.devices)) {
+        return record.devices;
+      }
+      if (Array.isArray(record.deviceList)) {
+        return record.deviceList;
+      }
+      if (Array.isArray(record.data)) {
+        return record.data;
+      }
+      return [];
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`${host} request timeout`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async initWithTimeout(cookieContent: string): Promise<void> {
