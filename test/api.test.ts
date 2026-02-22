@@ -26,6 +26,11 @@ describe("airbridge api", () => {
     process.env.AIRBRIDGE_ADMIN_USER = "admin";
     process.env.AIRBRIDGE_SPAWN_PROCESSES = "false";
     process.env.AIRBRIDGE_ALEXA_INVOKE_MODE = "mock";
+    process.env.AIRBRIDGE_SETUP_ENV_FILE = path.join(tmpRoot, "airbridge.env");
+    process.env.AIRBRIDGE_SETUP_CLOUDFLARED_FILE = path.join(tmpRoot, "cloudflared.yml");
+    process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE = path.join(tmpRoot, "alexa-cookie.txt");
+    process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_ENCRYPTED_FILE = path.join(tmpRoot, "airbridge_alexa_cookie");
+    process.env.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION = "false";
 
     vi.resetModules();
     const server = await import("../src/server");
@@ -47,6 +52,11 @@ describe("airbridge api", () => {
     delete process.env.AIRBRIDGE_ADMIN_USER;
     delete process.env.AIRBRIDGE_SPAWN_PROCESSES;
     delete process.env.AIRBRIDGE_ALEXA_INVOKE_MODE;
+    delete process.env.AIRBRIDGE_SETUP_ENV_FILE;
+    delete process.env.AIRBRIDGE_SETUP_CLOUDFLARED_FILE;
+    delete process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE;
+    delete process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_ENCRYPTED_FILE;
+    delete process.env.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION;
   });
 
   it("requires auth for protected endpoints", async () => {
@@ -98,5 +108,52 @@ describe("airbridge api", () => {
 
     expect(updated.status).toBe(409);
     expect(updated.body.error).toBe("GROUP_NATIVE_UNSUPPORTED");
+  });
+
+  it("writes setup config and persists it to setup env file", async () => {
+    const agent = request.agent(bundle.app);
+
+    await agent
+      .post("/api/auth/login")
+      .send({ username: "admin", password: "test-password" })
+      .expect(200);
+
+    const updateRes = await agent.put("/api/setup/config").send({
+      values: {
+        AIRBRIDGE_STREAM_BASE_URL: "https://updated.example.com",
+        AIRBRIDGE_TRUST_PROXY: true,
+        AIRBRIDGE_PORT: 3333,
+      },
+    });
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.values.AIRBRIDGE_STREAM_BASE_URL).toBe("https://updated.example.com");
+
+    const setupConfigRes = await agent.get("/api/setup/config");
+    expect(setupConfigRes.status).toBe(200);
+    expect(setupConfigRes.body.values.AIRBRIDGE_PORT).toBe("3333");
+
+    const envFile = fs.readFileSync(process.env.AIRBRIDGE_SETUP_ENV_FILE as string, "utf8");
+    expect(envFile).toContain("AIRBRIDGE_STREAM_BASE_URL=https://updated.example.com");
+    expect(envFile).toContain("AIRBRIDGE_PORT=3333");
+  });
+
+  it("updates admin password as hash via setup endpoint", async () => {
+    const agent = request.agent(bundle.app);
+
+    await agent
+      .post("/api/auth/login")
+      .send({ username: "admin", password: "test-password" })
+      .expect(200);
+
+    const res = await agent.post("/api/setup/admin-password").send({
+      password: "new-password-1234",
+    });
+
+    expect(res.status).toBe(200);
+
+    const envFile = fs.readFileSync(process.env.AIRBRIDGE_SETUP_ENV_FILE as string, "utf8");
+    expect(envFile).toContain("AIRBRIDGE_ADMIN_PASSWORD_HASH=");
+    expect(envFile).not.toContain("AIRBRIDGE_ADMIN_PASSWORD=");
   });
 });

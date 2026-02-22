@@ -6,43 +6,73 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
+REPO_DIR="${1:-$(pwd)}"
 APP_USER="airbridge"
 APP_GROUP="airbridge"
 APP_DIR="/opt/airbridge"
 ENV_DIR="/etc/airbridge"
+ENV_FILE="${ENV_DIR}/airbridge.env"
+CLOUDFLARED_FILE="${ENV_DIR}/cloudflared.yml"
 DATA_DIR="/var/lib/airbridge"
 RUN_DIR="/run/airbridge"
+CRED_DIR="/etc/credstore.encrypted"
+ENC_COOKIE_FILE="${CRED_DIR}/airbridge_alexa_cookie"
+PLAIN_COOKIE_FILE="${ENV_DIR}/alexa-cookie.txt"
 
+if [[ ! -f "${REPO_DIR}/package.json" ]]; then
+  echo "Invalid repo path: ${REPO_DIR}" >&2
+  exit 1
+fi
+
+if [[ -f /etc/os-release ]]; then
+  . /etc/os-release
+  if [[ "${ID:-}" != "debian" && "${ID:-}" != "ubuntu" ]]; then
+    echo "Warning: script is optimized for Debian/Ubuntu. Detected ${ID:-unknown}." >&2
+  fi
+fi
+
+export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-  ca-certificates curl gnupg sqlite3 ffmpeg shairport-sync cloudflared
+  ca-certificates curl gnupg rsync openssl sudo \
+  sqlite3 ffmpeg shairport-sync cloudflared
 
 if ! command -v node >/dev/null 2>&1; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
 fi
 
-if ! id -u "${APP_USER}" >/dev/null 2>&1; then
-  if ! getent group "${APP_GROUP}" >/dev/null 2>&1; then
-    groupadd --system "${APP_GROUP}"
-  fi
-  useradd --system --gid "${APP_GROUP}" --home "${APP_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
-fi
-
-install -d -o "${APP_USER}" -g "${APP_GROUP}" "${APP_DIR}" "${DATA_DIR}" "${DATA_DIR}/hls" "${DATA_DIR}/db"
-install -d -o "${APP_USER}" -g "${APP_GROUP}" "${RUN_DIR}"
-install -d -m 0750 "${ENV_DIR}"
-install -d -m 0750 /etc/credstore.encrypted
-
-if [[ ! -f package.json ]]; then
-  echo "Run this script from the repository root." >&2
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm is missing after Node install" >&2
   exit 1
 fi
 
+if ! getent group "${APP_GROUP}" >/dev/null 2>&1; then
+  groupadd --system "${APP_GROUP}"
+fi
+
+if ! id -u "${APP_USER}" >/dev/null 2>&1; then
+  useradd --system --gid "${APP_GROUP}" --home "${APP_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
+fi
+
+install -d -o "${APP_USER}" -g "${APP_GROUP}" "${APP_DIR}"
+install -d -o "${APP_USER}" -g "${APP_GROUP}" "${DATA_DIR}" "${DATA_DIR}/hls" "${DATA_DIR}/db"
+install -d -o "${APP_USER}" -g "${APP_GROUP}" "${RUN_DIR}"
+install -d -o root -g "${APP_GROUP}" -m 0770 "${ENV_DIR}"
+install -d -o root -g "${APP_GROUP}" -m 0770 "${CRED_DIR}"
+
+rsync -a --delete \
+  --exclude '.git' \
+  --exclude 'node_modules' \
+  --exclude 'dist' \
+  --exclude 'var' \
+  --exclude 'run' \
+  "${REPO_DIR}/" "${APP_DIR}/"
+
+cd "${APP_DIR}"
 npm ci
 npm run build
 
-cp -a dist package.json package-lock.json node_modules src scripts deploy "${APP_DIR}/"
 chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}" "${DATA_DIR}" "${RUN_DIR}"
 
 install -m 0644 deploy/systemd/airbridge.service /etc/systemd/system/airbridge.service
@@ -50,21 +80,93 @@ install -m 0644 deploy/systemd/cloudflared-airbridge.service /etc/systemd/system
 install -m 0644 deploy/systemd/airbridge-watchdog.service /etc/systemd/system/airbridge-watchdog.service
 install -m 0644 deploy/systemd/airbridge-watchdog.timer /etc/systemd/system/airbridge-watchdog.timer
 
-if [[ ! -f "${ENV_DIR}/airbridge.env" ]]; then
-  cp .env.example "${ENV_DIR}/airbridge.env"
-  chmod 0640 "${ENV_DIR}/airbridge.env"
+if [[ ! -f "${ENV_FILE}" ]]; then
+  SESSION_SECRET="$(openssl rand -hex 32)"
+  ADMIN_PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
+
+  cat > "${ENV_FILE}" <<ENV
+# Managed by AirBridge installer and Web UI
+AIRBRIDGE_BIND_HOST=0.0.0.0
+AIRBRIDGE_PORT=3000
+AIRBRIDGE_TRUST_PROXY=true
+AIRBRIDGE_SESSION_SECRET=${SESSION_SECRET}
+AIRBRIDGE_STREAM_BASE_URL=https://stream.airbridge.example.com
+AIRBRIDGE_ADMIN_USER=admin
+AIRBRIDGE_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+AIRBRIDGE_SESSION_TTL_SECONDS=28800
+AIRBRIDGE_AUTH_RATE_LIMIT=12
+AIRBRIDGE_ALEXA_INVOKE_MODE=alexa_remote2
+AIRBRIDGE_ALEXA_INVOCATION_PREFIX=open air bridge and play token
+AIRBRIDGE_ALEXA_COOKIE_PATH=/run/credentials/airbridge.service/alexa_cookie
+AIRBRIDGE_SHAIRPORT_BIN=/usr/bin/shairport-sync
+AIRBRIDGE_FFMPEG_BIN=/usr/bin/ffmpeg
+AIRBRIDGE_FFMPEG_BITRATE=192k
+AIRBRIDGE_SPAWN_PROCESSES=true
+AIRBRIDGE_HLS_SEGMENT_SECONDS=2
+AIRBRIDGE_HLS_LIST_SIZE=6
+AIRBRIDGE_MONITOR_INTERVAL_MS=2000
+AIRBRIDGE_DATA_ROOT=/var/lib/airbridge
+AIRBRIDGE_RUN_ROOT=/run/airbridge
+AIRBRIDGE_HLS_ROOT=/var/lib/airbridge/hls
+AIRBRIDGE_DB_PATH=/var/lib/airbridge/db/airbridge.sqlite
+AIRBRIDGE_SETUP_ENV_FILE=/etc/airbridge/airbridge.env
+AIRBRIDGE_SETUP_CLOUDFLARED_FILE=/etc/airbridge/cloudflared.yml
+AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE=/etc/airbridge/alexa-cookie.txt
+AIRBRIDGE_SETUP_ALEXA_COOKIE_ENCRYPTED_FILE=/etc/credstore.encrypted/airbridge_alexa_cookie
+AIRBRIDGE_SERVICE_NAME=airbridge.service
+AIRBRIDGE_CLOUDFLARED_SERVICE_NAME=cloudflared-airbridge.service
+AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION=true
+ENV
+
+  echo "Generated initial admin password: ${ADMIN_PASSWORD}"
+else
+  echo "Keeping existing ${ENV_FILE}"
 fi
 
-if [[ ! -f "${ENV_DIR}/cloudflared.yml" ]]; then
-  cp deploy/cloudflared/config.yml.template "${ENV_DIR}/cloudflared.yml"
-  chmod 0640 "${ENV_DIR}/cloudflared.yml"
+if [[ ! -f "${CLOUDFLARED_FILE}" ]]; then
+  cp deploy/cloudflared/config.yml.template "${CLOUDFLARED_FILE}"
+fi
+
+if [[ ! -f "${PLAIN_COOKIE_FILE}" ]]; then
+  touch "${PLAIN_COOKIE_FILE}"
+fi
+
+if [[ ! -f "${ENC_COOKIE_FILE}" ]]; then
+  TMP_COOKIE_FILE="$(mktemp)"
+  : > "${TMP_COOKIE_FILE}"
+
+  if command -v systemd-creds >/dev/null 2>&1; then
+    if ! systemd-creds encrypt --name=airbridge_alexa_cookie "${TMP_COOKIE_FILE}" "${ENC_COOKIE_FILE}"; then
+      echo "Warning: could not create encrypted cookie placeholder." >&2
+    fi
+  else
+    echo "Warning: systemd-creds not found. Encrypted cookie mode unavailable." >&2
+  fi
+
+  rm -f "${TMP_COOKIE_FILE}"
+fi
+
+chown root:"${APP_GROUP}" "${ENV_FILE}" "${CLOUDFLARED_FILE}" "${PLAIN_COOKIE_FILE}" || true
+chmod 0660 "${ENV_FILE}" "${CLOUDFLARED_FILE}" "${PLAIN_COOKIE_FILE}" || true
+
+if [[ -f "${ENC_COOKIE_FILE}" ]]; then
+  chown root:"${APP_GROUP}" "${ENC_COOKIE_FILE}" || true
+  chmod 0660 "${ENC_COOKIE_FILE}" || true
 fi
 
 systemctl daemon-reload
-systemctl enable airbridge.service airbridge-watchdog.timer
+systemctl enable --now airbridge.service
+systemctl enable --now airbridge-watchdog.timer
 
+echo ""
 echo "Installation complete."
-echo "1) Edit ${ENV_DIR}/airbridge.env"
-echo "2) Add encrypted credential in /etc/credstore.encrypted/airbridge_alexa_cookie"
-echo "3) Configure tunnel in ${ENV_DIR}/cloudflared.yml and enable cloudflared-airbridge.service"
-echo "4) Start service: systemctl start airbridge.service"
+echo "Web UI: http://<host>:3000"
+echo "Env file: ${ENV_FILE}"
+echo "Cloudflared config: ${CLOUDFLARED_FILE}"
+echo "Encrypted cookie file: ${ENC_COOKIE_FILE}"
+echo "Plain cookie file fallback: ${PLAIN_COOKIE_FILE}"
+echo ""
+echo "Next steps:"
+echo "1) In Web UI unter 'System Setup' Stream URL, Cookie und Cloudflared eintragen"
+echo "2) Cloudflared manuell starten, wenn konfiguriert: systemctl enable --now cloudflared-airbridge.service"
+echo "3) Nach Setup in Web UI 'Aenderungen anwenden (AirBridge Neustart)' klicken"

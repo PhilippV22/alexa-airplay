@@ -10,15 +10,14 @@ Group=airbridge
 WorkingDirectory=/opt/airbridge
 EnvironmentFile=/etc/airbridge/airbridge.env
 LoadCredentialEncrypted=alexa_cookie:/etc/credstore.encrypted/airbridge_alexa_cookie
-Environment=AIRBRIDGE_ALEXA_COOKIE_PATH=/run/credentials/%N/alexa_cookie
-ExecStart=/usr/bin/node /opt/airbridge/dist/index.js
+ExecStart=/usr/bin/node /opt/airbridge/dist/src/index.js
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/airbridge /run/airbridge
+ReadWritePaths=/var/lib/airbridge /run/airbridge /etc/airbridge /etc/credstore.encrypted
 RuntimeDirectory=airbridge
 RuntimeDirectoryMode=0750
 UMask=0027
