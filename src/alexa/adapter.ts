@@ -67,6 +67,7 @@ export class AlexaAdapter {
   private readonly initTimeoutMs: number;
   private remote: AlexaRemote | null = null;
   private initialized = false;
+  private initInFlight: Promise<void> | null = null;
 
   constructor(params: {
     mode: string;
@@ -81,6 +82,24 @@ export class AlexaAdapter {
   }
 
   async init(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+
+    if (this.initInFlight) {
+      await this.initInFlight;
+      return;
+    }
+
+    this.initInFlight = this.initInternal();
+    try {
+      await this.initInFlight;
+    } finally {
+      this.initInFlight = null;
+    }
+  }
+
+  private async initInternal(): Promise<void> {
     if (this.mode === "mock") {
       this.initialized = true;
       return;
@@ -106,7 +125,11 @@ export class AlexaAdapter {
 
   async invokeStream(target: Target, streamToken: string, streamUrl: string): Promise<void> {
     if (!this.initialized) {
-      throw codeError("ALEXA_AUTH_FAILED", "Alexa adapter is not initialized");
+      await this.init();
+    }
+
+    if (!this.initialized) {
+      throw codeError("ALEXA_AUTH_FAILED", "Alexa adapter is not initialized after retry");
     }
 
     if (this.mode === "mock") {
@@ -341,7 +364,8 @@ export class AlexaAdapter {
       this.remote?.init(
         {
           cookie: cookieContent,
-          proxyOnly: true,
+          // Runtime client must not run in proxy-only mode.
+          proxyOnly: false,
           bluetooth: false,
           notifications: false,
           // We only need command APIs; WS-MQTT can stall init on some networks.
