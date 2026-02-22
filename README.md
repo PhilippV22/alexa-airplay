@@ -115,8 +115,8 @@ Runtime:
 - App: `/opt/airbridge`
 - Env: `/etc/airbridge/airbridge.env`
 - Cloudflared Config: `/etc/airbridge/cloudflared.yml`
-- Encrypted Cookie: `/etc/credstore.encrypted/airbridge_alexa_cookie`
-- Plain Cookie Fallback: `/etc/airbridge/alexa-cookie.txt`
+- Alexa Cookie (Default): `/etc/airbridge/alexa-cookie.txt`
+- Encrypted Cookie (optional, advanced): `/etc/credstore.encrypted/airbridge_alexa_cookie`
 - DB: `/var/lib/airbridge/db/airbridge.sqlite`
 - HLS: `/var/lib/airbridge/hls/<target-id>/`
 - FIFO: `/run/airbridge/fifo/<target-id>.pcm`

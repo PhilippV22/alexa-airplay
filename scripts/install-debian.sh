@@ -29,6 +29,30 @@ CRED_DIR="/etc/credstore.encrypted"
 ENC_COOKIE_FILE="${CRED_DIR}/airbridge_alexa_cookie"
 PLAIN_COOKIE_FILE="${ENV_DIR}/alexa-cookie.txt"
 
+upsert_env() {
+  local key="$1"
+  local value="$2"
+  local file="$3"
+  local tmp_file
+
+  tmp_file="$(mktemp)"
+  awk -v k="${key}" -v v="${value}" '
+    BEGIN { updated = 0 }
+    $0 ~ "^" k "=" {
+      print k "=" v
+      updated = 1
+      next
+    }
+    { print }
+    END {
+      if (!updated) {
+        print k "=" v
+      }
+    }
+  ' "${file}" > "${tmp_file}"
+  mv "${tmp_file}" "${file}"
+}
+
 if [[ ! -f "${REPO_DIR}/package.json" ]]; then
   echo "Invalid repo path: ${REPO_DIR}" >&2
   exit 1
@@ -123,7 +147,7 @@ AIRBRIDGE_SESSION_TTL_SECONDS=28800
 AIRBRIDGE_AUTH_RATE_LIMIT=12
 AIRBRIDGE_ALEXA_INVOKE_MODE=alexa_remote2
 AIRBRIDGE_ALEXA_INVOCATION_PREFIX=open air bridge and play token
-AIRBRIDGE_ALEXA_COOKIE_PATH=/run/credentials/airbridge.service/alexa_cookie
+AIRBRIDGE_ALEXA_COOKIE_PATH=/etc/airbridge/alexa-cookie.txt
 AIRBRIDGE_SHAIRPORT_BIN=/usr/bin/shairport-sync
 AIRBRIDGE_FFMPEG_BIN=/usr/bin/ffmpeg
 AIRBRIDGE_FFMPEG_BITRATE=192k
@@ -141,13 +165,17 @@ AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE=/etc/airbridge/alexa-cookie.txt
 AIRBRIDGE_SETUP_ALEXA_COOKIE_ENCRYPTED_FILE=/etc/credstore.encrypted/airbridge_alexa_cookie
 AIRBRIDGE_SERVICE_NAME=airbridge.service
 AIRBRIDGE_CLOUDFLARED_SERVICE_NAME=cloudflared-airbridge.service
-AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION=true
+AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION=false
 ENV
 
   echo "Generated initial admin password: ${ADMIN_PASSWORD}"
 else
   echo "Keeping existing ${ENV_FILE}"
 fi
+
+# Keep default installation mode simple and always bootable without systemd credentials.
+upsert_env "AIRBRIDGE_ALEXA_COOKIE_PATH" "${PLAIN_COOKIE_FILE}" "${ENV_FILE}"
+upsert_env "AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION" "false" "${ENV_FILE}"
 
 if [[ ! -f "${CLOUDFLARED_FILE}" ]]; then
   cp deploy/cloudflared/config.yml.template "${CLOUDFLARED_FILE}"
@@ -157,28 +185,8 @@ if [[ ! -f "${PLAIN_COOKIE_FILE}" ]]; then
   touch "${PLAIN_COOKIE_FILE}"
 fi
 
-if [[ ! -f "${ENC_COOKIE_FILE}" ]]; then
-  TMP_COOKIE_FILE="$(mktemp)"
-  : > "${TMP_COOKIE_FILE}"
-
-  if command -v systemd-creds >/dev/null 2>&1; then
-    if ! systemd-creds encrypt --name=airbridge_alexa_cookie "${TMP_COOKIE_FILE}" "${ENC_COOKIE_FILE}"; then
-      echo "Warning: could not create encrypted cookie placeholder." >&2
-    fi
-  else
-    echo "Warning: systemd-creds not found. Encrypted cookie mode unavailable." >&2
-  fi
-
-  rm -f "${TMP_COOKIE_FILE}"
-fi
-
 chown root:"${APP_GROUP}" "${ENV_FILE}" "${CLOUDFLARED_FILE}" "${PLAIN_COOKIE_FILE}" || true
 chmod 0660 "${ENV_FILE}" "${CLOUDFLARED_FILE}" "${PLAIN_COOKIE_FILE}" || true
-
-if [[ -f "${ENC_COOKIE_FILE}" ]]; then
-  chown root:"${APP_GROUP}" "${ENC_COOKIE_FILE}" || true
-  chmod 0660 "${ENC_COOKIE_FILE}" || true
-fi
 
 systemctl daemon-reload
 systemctl enable --now airbridge.service
@@ -189,8 +197,7 @@ echo "Installation complete."
 echo "Web UI: http://<host>:3000"
 echo "Env file: ${ENV_FILE}"
 echo "Cloudflared config: ${CLOUDFLARED_FILE}"
-echo "Encrypted cookie file: ${ENC_COOKIE_FILE}"
-echo "Plain cookie file fallback: ${PLAIN_COOKIE_FILE}"
+echo "Alexa cookie file: ${PLAIN_COOKIE_FILE}"
 echo ""
 echo "Next steps:"
 echo "1) In Web UI unter 'System Setup' Stream URL, Cookie und Cloudflared eintragen"

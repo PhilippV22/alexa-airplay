@@ -9,7 +9,6 @@ User=airbridge
 Group=airbridge
 WorkingDirectory=/opt/airbridge
 EnvironmentFile=/etc/airbridge/airbridge.env
-LoadCredentialEncrypted=alexa_cookie:/etc/credstore.encrypted/airbridge_alexa_cookie
 ExecStart=/usr/bin/node /opt/airbridge/dist/src/index.js
 Restart=always
 RestartSec=3
