@@ -1,0 +1,8 @@
+[Unit]
+Description=AirBridge watchdog health check
+After=airbridge.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/airbridge/airbridge.env
+ExecStart=/opt/airbridge/scripts/watchdog.sh

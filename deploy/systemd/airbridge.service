@@ -1,0 +1,27 @@
+[Unit]
+Description=AirBridge Core Service (AirPlay -> Alexa)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=airbridge
+Group=airbridge
+WorkingDirectory=/opt/airbridge
+EnvironmentFile=/etc/airbridge/airbridge.env
+LoadCredentialEncrypted=alexa_cookie:/etc/credstore.encrypted/airbridge_alexa_cookie
+Environment=AIRBRIDGE_ALEXA_COOKIE_PATH=/run/credentials/%N/alexa_cookie
+ExecStart=/usr/bin/node /opt/airbridge/dist/index.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/airbridge /run/airbridge
+RuntimeDirectory=airbridge
+RuntimeDirectoryMode=0750
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

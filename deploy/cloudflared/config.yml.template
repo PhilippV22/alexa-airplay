@@ -1,0 +1,9 @@
+tunnel: YOUR_TUNNEL_UUID
+credentials-file: /etc/cloudflared/YOUR_TUNNEL_UUID.json
+
+ingress:
+  - hostname: stream.airbridge.example.com
+    service: http://127.0.0.1:3000
+  - hostname: skill.airbridge.example.com
+    service: http://127.0.0.1:3000
+  - service: http_status:404
