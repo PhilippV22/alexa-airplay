@@ -34,6 +34,12 @@ interface ProcessManagerOptions {
   onTargetError: (target: Target, errorCode: ErrorCode, details?: string) => void;
 }
 
+interface ShairportPorts {
+  raopPort: number;
+  udpPortBase: number;
+  udpPortRange: number;
+}
+
 export class ProcessManager {
   private readonly options: ProcessManagerOptions;
   private readonly processes = new Map<number, RuntimeProcess>();
@@ -133,24 +139,30 @@ export class ProcessManager {
     }
 
     try {
-      const shairportConfigPath = this.writeShairportConfig(target, fifoPath);
+      const shairportPorts = this.getShairportPorts(target.id);
+      const shairportConfigPath = this.writeShairportConfig(target, fifoPath, shairportPorts);
       const shairport = spawn(this.options.shairportBin, ["-c", shairportConfigPath], {
         stdio: ["ignore", "pipe", "pipe"],
       });
+      const shairportErrLines: string[] = [];
+      const ffmpegErrLines: string[] = [];
 
       shairport.stdout.on("data", (chunk) => {
         logger.debug("shairport stdout", { targetId: target.id, output: chunk.toString() });
       });
       shairport.stderr.on("data", (chunk) => {
-        logger.debug("shairport stderr", { targetId: target.id, output: chunk.toString() });
+        const output = chunk.toString();
+        logger.debug("shairport stderr", { targetId: target.id, output });
+        this.pushRecentLogLines(shairportErrLines, output);
       });
       shairport.on("exit", (code) => {
         if (runtime.state === "stopped") {
           return;
         }
         runtime.state = "error";
-        logger.error("shairport exited", { targetId: target.id, code });
-        this.options.onTargetError(target, "TRANSCODER_FAILED", `shairport exit ${code}`);
+        const details = this.formatProcessExitDetails("shairport", code, shairportErrLines);
+        logger.error("shairport exited", { targetId: target.id, code, details });
+        this.options.onTargetError(target, "TRANSCODER_FAILED", details);
       });
 
       const ffmpeg = spawn(
@@ -188,15 +200,18 @@ export class ProcessManager {
         logger.debug("ffmpeg stdout", { targetId: target.id, output: chunk.toString() });
       });
       ffmpeg.stderr.on("data", (chunk) => {
-        logger.debug("ffmpeg stderr", { targetId: target.id, output: chunk.toString() });
+        const output = chunk.toString();
+        logger.debug("ffmpeg stderr", { targetId: target.id, output });
+        this.pushRecentLogLines(ffmpegErrLines, output);
       });
       ffmpeg.on("exit", (code) => {
         if (runtime.state === "stopped") {
           return;
         }
         runtime.state = "error";
-        logger.error("ffmpeg exited", { targetId: target.id, code });
-        this.options.onTargetError(target, "TRANSCODER_FAILED", `ffmpeg exit ${code}`);
+        const details = this.formatProcessExitDetails("ffmpeg", code, ffmpegErrLines);
+        logger.error("ffmpeg exited", { targetId: target.id, code, details });
+        this.options.onTargetError(target, "TRANSCODER_FAILED", details);
       });
 
       runtime.shairport = shairport;
@@ -212,6 +227,8 @@ export class ProcessManager {
         targetId: target.id,
         shairportPid: shairport.pid,
         ffmpegPid: ffmpeg.pid,
+        raopPort: shairportPorts.raopPort,
+        udpPortBase: shairportPorts.udpPortBase,
       });
     } catch (error) {
       logger.error("failed to start target", {
@@ -251,14 +268,49 @@ export class ProcessManager {
     }
   }
 
-  private writeShairportConfig(target: Target, fifoPath: string): string {
+  private writeShairportConfig(target: Target, fifoPath: string, ports: ShairportPorts): string {
     const confPath = path.join(this.options.shairportConfigRoot, `target-${target.id}.conf`);
     const safeName = target.airplay_name.replace(/"/g, "");
 
-    const content = `general = {\n  name = \"${safeName}\";\n  output_backend = \"pipe\";\n};\n\npipe = {\n  name = \"${fifoPath}\";\n  format = \"S16\";\n};\n`;
+    const content = `general = {\n  name = \"${safeName}\";\n  output_backend = \"pipe\";\n  port = ${ports.raopPort};\n  udp_port_base = ${ports.udpPortBase};\n  udp_port_range = ${ports.udpPortRange};\n};\n\npipe = {\n  name = \"${fifoPath}\";\n  format = \"S16\";\n};\n`;
 
     fs.writeFileSync(confPath, content, { encoding: "utf8" });
     return confPath;
+  }
+
+  private getShairportPorts(targetId: number): ShairportPorts {
+    const slot = ((targetId - 1) % 3500 + 3500) % 3500;
+    return {
+      raopPort: 5500 + slot,
+      udpPortBase: 20000 + slot * 10,
+      udpPortRange: 10,
+    };
+  }
+
+  private pushRecentLogLines(buffer: string[], output: string): void {
+    const lines = output
+      .split(/\r?\n/g)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      buffer.push(line);
+      if (buffer.length > 20) {
+        buffer.shift();
+      }
+    }
+  }
+
+  private formatProcessExitDetails(
+    processName: "shairport" | "ffmpeg",
+    code: number | null,
+    recentLines: string[],
+  ): string {
+    const parts = [`${processName} exit ${code ?? "null"}`];
+    if (recentLines.length > 0) {
+      parts.push(recentLines.slice(-4).join(" | "));
+    }
+    return parts.join(": ");
   }
 
   private stopTarget(targetId: number): void {
