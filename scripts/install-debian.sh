@@ -6,7 +6,17 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-REPO_DIR="${1:-$(pwd)}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ $# -ge 1 ]]; then
+  REPO_DIR="${1}"
+elif [[ -f "$(pwd)/package.json" ]]; then
+  REPO_DIR="$(pwd)"
+elif [[ -f "${SCRIPT_DIR}/../package.json" ]]; then
+  REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+else
+  REPO_DIR="$(pwd)"
+fi
 APP_USER="airbridge"
 APP_GROUP="airbridge"
 APP_DIR="/opt/airbridge"
