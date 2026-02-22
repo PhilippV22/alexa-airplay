@@ -51,7 +51,8 @@ sudo ./scripts/install-debian.sh
 
 Was das Script macht:
 
-- installiert Pakete (Node.js 22, ffmpeg, shairport-sync, cloudflared, ...)
+- installiert Pflichtpakete (Node.js 22, ffmpeg, shairport-sync)
+- versucht optional `cloudflared` zu installieren, falls in apt verfuegbar
 - deployed nach `/opt/airbridge`
 - legt User/Group `airbridge` an
 - erzeugt `/etc/airbridge/airbridge.env` mit sicheren Defaults
@@ -65,7 +66,7 @@ Nach dem Install:
 3. Unter `System Setup` Stream-URL, Alexa-Cookie und Cloudflared konfigurieren
 4. `Aenderungen anwenden (AirBridge Neustart)` klicken
 
-Optional Cloudflared starten:
+Optional Cloudflared starten (nur falls installiert):
 
 ```bash
 sudo systemctl enable --now cloudflared-airbridge.service

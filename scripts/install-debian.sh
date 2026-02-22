@@ -45,7 +45,18 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   ca-certificates curl gnupg rsync openssl sudo \
-  sqlite3 ffmpeg shairport-sync cloudflared
+  sqlite3 ffmpeg shairport-sync
+
+CLOUDFLARED_INSTALLED="false"
+if apt-cache show cloudflared >/dev/null 2>&1; then
+  if apt-get install -y --no-install-recommends cloudflared; then
+    CLOUDFLARED_INSTALLED="true"
+  else
+    echo "Warning: cloudflared installation failed. Continuing without it." >&2
+  fi
+else
+  echo "Warning: cloudflared package not found in current apt sources. Continuing without it." >&2
+fi
 
 if ! command -v node >/dev/null 2>&1; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
@@ -178,5 +189,9 @@ echo "Plain cookie file fallback: ${PLAIN_COOKIE_FILE}"
 echo ""
 echo "Next steps:"
 echo "1) In Web UI unter 'System Setup' Stream URL, Cookie und Cloudflared eintragen"
-echo "2) Cloudflared manuell starten, wenn konfiguriert: systemctl enable --now cloudflared-airbridge.service"
+if [[ "${CLOUDFLARED_INSTALLED}" == "true" ]]; then
+  echo "2) Optional: Cloudflared starten: systemctl enable --now cloudflared-airbridge.service"
+else
+  echo "2) Optional: cloudflared spaeter installieren und dann cloudflared-airbridge.service starten"
+fi
 echo "3) Nach Setup in Web UI 'Aenderungen anwenden (AirBridge Neustart)' klicken"
