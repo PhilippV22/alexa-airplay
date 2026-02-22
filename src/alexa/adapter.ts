@@ -12,6 +12,14 @@ export interface AlexaDeviceSummary {
   deviceFamily: string;
 }
 
+interface AlexaHttpDeviceContext {
+  serialNumber: string;
+  deviceType: string;
+  customerId: string;
+  locale: string;
+  host: string;
+}
+
 function codeError(code: string, message: string): InvokeError {
   const err = new Error(message) as InvokeError;
   err.code = code;
@@ -58,6 +66,28 @@ function inferAlexaHosts(cookieContent: string): string[] {
   );
 
   return Array.from(new Set(hosts));
+}
+
+function defaultLocaleForHost(host: string): string {
+  if (host.endsWith(".amazon.de")) {
+    return "de-DE";
+  }
+  if (host.endsWith(".amazon.co.uk")) {
+    return "en-GB";
+  }
+  if (host.endsWith(".amazon.fr")) {
+    return "fr-FR";
+  }
+  if (host.endsWith(".amazon.it")) {
+    return "it-IT";
+  }
+  if (host.endsWith(".amazon.es")) {
+    return "es-ES";
+  }
+  if (host.endsWith(".amazon.co.jp")) {
+    return "ja-JP";
+  }
+  return "en-US";
 }
 
 export class AlexaAdapter {
@@ -124,20 +154,8 @@ export class AlexaAdapter {
   }
 
   async invokeStream(target: Target, streamToken: string, streamUrl: string): Promise<void> {
-    if (!this.initialized) {
-      await this.init();
-    }
-
-    if (!this.initialized) {
-      throw codeError("ALEXA_AUTH_FAILED", "Alexa adapter is not initialized after retry");
-    }
-
     if (this.mode === "mock") {
       return;
-    }
-
-    if (!this.remote) {
-      throw codeError("ALEXA_AUTH_FAILED", "Alexa remote client is missing");
     }
 
     if (!target.alexa_device_id) {
@@ -145,10 +163,45 @@ export class AlexaAdapter {
     }
 
     const utterance = `${this.invocationPrefix} ${streamToken}`;
+    let lastError: string | null = null;
+
+    if (!this.initialized) {
+      try {
+        await this.init();
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    if (this.initialized && this.remote) {
+      try {
+        await this.sendViaRemote(target.alexa_device_id, utterance);
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    try {
+      await this.sendViaHttp(target.alexa_device_id, utterance);
+      return;
+    } catch (error) {
+      const httpError = error instanceof Error ? error.message : String(error);
+      const message = lastError
+        ? `${lastError}; HTTP fallback failed: ${httpError}`
+        : httpError;
+      throw codeError("ALEXA_AUTH_FAILED", message);
+    }
+  }
+
+  private async sendViaRemote(deviceSerial: string, utterance: string): Promise<void> {
+    if (!this.remote) {
+      throw codeError("ALEXA_AUTH_FAILED", "Alexa remote client is missing");
+    }
 
     await new Promise<void>((resolve, reject) => {
       this.remote?.sendSequenceCommand(
-        target.alexa_device_id as string,
+        deviceSerial,
         "textCommand",
         utterance,
         (err: Error | null | undefined) => {
@@ -160,8 +213,70 @@ export class AlexaAdapter {
         },
       );
     });
+  }
 
-    void streamUrl;
+  private async sendViaHttp(deviceSerial: string, utterance: string): Promise<void> {
+    const cookieContent = this.readCookieContent();
+    const csrf = extractCsrf(cookieContent);
+    if (!csrf) {
+      throw new Error("Alexa cookie does not contain csrf token");
+    }
+
+    const context = await this.resolveHttpDeviceContext(deviceSerial, cookieContent);
+    const requestBody = {
+      behaviorId: "PREVIEW",
+      sequenceJson: JSON.stringify({
+        "@type": "com.amazon.alexa.behaviors.model.Sequence",
+        startNode: {
+          "@type": "com.amazon.alexa.behaviors.model.OpaquePayloadOperationNode",
+          type: "Alexa.TextCommand",
+          skillId: "amzn1.ask.1p.tellalexa",
+          operationPayload: {
+            deviceType: context.deviceType,
+            deviceSerialNumber: context.serialNumber,
+            locale: context.locale,
+            customerId: context.customerId,
+            text: utterance.toLowerCase(),
+          },
+        },
+      }),
+      status: "ENABLED",
+    };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(this.initTimeoutMs, 20_000));
+    timer.unref();
+
+    try {
+      const response = await fetch(`https://${context.host}/api/behaviors/preview`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+          cookie: cookieContent,
+          csrf,
+          "x-csrf-token": csrf,
+          referer: `https://${context.host}/spa/index.html`,
+          origin: `https://${context.host}`,
+          "user-agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`${context.host} preview failed with ${response.status}: ${text.slice(0, 240)}`);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`${context.host} preview request timeout`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async listDevices(): Promise<AlexaDeviceSummary[]> {
@@ -230,6 +345,82 @@ export class AlexaAdapter {
       : rawDevices && typeof rawDevices === "object"
         ? Object.values(rawDevices as Record<string, unknown>)
         : [];
+  }
+
+  private async resolveHttpDeviceContext(
+    deviceSerial: string,
+    cookieContent: string,
+  ): Promise<AlexaHttpDeviceContext> {
+    const hosts = inferAlexaHosts(cookieContent);
+    let lastError = "device not found";
+
+    for (const host of hosts) {
+      try {
+        const csrf = extractCsrf(cookieContent);
+        if (!csrf) {
+          throw new Error("csrf token missing");
+        }
+
+        const entries = await this.fetchDeviceEntries(host, cookieContent, csrf);
+        for (const entry of entries) {
+          if (!entry || typeof entry !== "object") {
+            continue;
+          }
+
+          const candidate = entry as Record<string, unknown>;
+          const serialNumber = this.readStringField(candidate, [
+            "serialNumber",
+            "deviceSerialNumber",
+          ]);
+          if (!serialNumber || serialNumber !== deviceSerial) {
+            continue;
+          }
+
+          const deviceType = this.readStringField(candidate, ["deviceType", "deviceTypeId"]);
+          const customerId = this.readStringField(candidate, [
+            "deviceOwnerCustomerId",
+            "customerId",
+            "ownerCustomerId",
+          ]);
+
+          if (!deviceType || !customerId) {
+            throw new Error(`missing deviceType/customerId for ${deviceSerial}`);
+          }
+
+          const locale =
+            this.readStringField(candidate, ["locale", "localeCode"]) ?? defaultLocaleForHost(host);
+
+          return {
+            serialNumber,
+            deviceType,
+            customerId,
+            locale,
+            host,
+          };
+        }
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+    }
+
+    throw new Error(`No Alexa command context for ${deviceSerial}: ${lastError}`);
+  }
+
+  private readStringField(
+    source: Record<string, unknown>,
+    keys: string[],
+  ): string | null {
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value !== "string") {
+        continue;
+      }
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+    return null;
   }
 
   private normalizeDeviceList(rawEntries: unknown[]): AlexaDeviceSummary[] {
