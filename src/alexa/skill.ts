@@ -67,19 +67,20 @@ export function createSkillRouter(options: SkillRouterOptions): Router {
         body.request?.intent?.slots?.streamToken?.value ??
         "";
 
-      if (!token) {
-        res.json(responseWithSpeech("Kein Stream Token erkannt."));
-        return;
-      }
-
-      const resolved = options.resolveToken(token);
+      const normalizedToken = token.trim();
+      const resolved = options.resolveToken(normalizedToken);
       if (!resolved) {
-        options.onSkillInvoke(-1, token, "failure", "token_not_found");
-        res.json(responseWithSpeech("Der Stream ist nicht verfügbar."));
+        const reason = normalizedToken ? "token_not_found" : "token_missing";
+        options.onSkillInvoke(-1, normalizedToken, "failure", reason);
+        res.json(
+          responseWithSpeech(
+            normalizedToken ? "Der Stream ist nicht verfügbar." : "Kein Stream Token erkannt.",
+          ),
+        );
         return;
       }
 
-      options.onSkillInvoke(resolved.target.id, token, "success");
+      options.onSkillInvoke(resolved.target.id, normalizedToken, "success");
       res.json({
         version: "1.0",
         response: {

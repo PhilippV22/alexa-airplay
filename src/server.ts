@@ -404,6 +404,14 @@ export async function createApp(): Promise<AppBundle> {
       return;
     }
 
+    if (file === "index.m3u8") {
+      store.addAudit("stream", "hls.request", resolved.target.id, "success", {
+        token,
+        ip: req.ip,
+        userAgent: typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : "",
+      });
+    }
+
     const baseDir = path.resolve(path.join(config.hlsRoot, String(resolved.target.id)));
     const absolutePath = path.resolve(path.join(baseDir, file));
     if (!absolutePath.startsWith(baseDir)) {

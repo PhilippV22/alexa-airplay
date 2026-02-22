@@ -1,4 +1,4 @@
-import { nanoid } from "nanoid";
+import { randomBytes } from "node:crypto";
 import { AppError } from "./errors";
 import { logger } from "./logger";
 import { MetricsService } from "./metrics";
@@ -11,6 +11,10 @@ export class PlaybackService {
   private readonly adapter: AlexaAdapter;
   private readonly streamBaseUrl: string;
   private readonly metrics: MetricsService;
+
+  private static normalizeToken(token: string): string {
+    return token.toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
 
   constructor(store: Store, adapter: AlexaAdapter, streamBaseUrl: string, metrics: MetricsService) {
     this.store = store;
@@ -48,7 +52,7 @@ export class PlaybackService {
       return existingSession;
     }
 
-    const token = nanoid(24);
+    const token = randomBytes(12).toString("hex");
     const streamUrl = this.buildSessionUrl(token);
     const session = this.store.createSession(target.id, streamUrl, token, "buffering");
 
@@ -105,9 +109,51 @@ export class PlaybackService {
   resolveSessionToken(token: string): { session: Session; target: Target } | null {
     const session = this.store.getSessionByToken(token);
     if (!session) {
+      // Alexa NLU can strip separators from token slot values.
+      const requested = PlaybackService.normalizeToken(token);
+      if (!requested) {
+        return this.resolveSingleActiveSession();
+      }
+
+      const active = this.store.listActiveSessions();
+      let matched: Session | null = null;
+      for (const candidate of active) {
+        if (PlaybackService.normalizeToken(candidate.stream_token) !== requested) {
+          continue;
+        }
+        if (matched) {
+          return null;
+        }
+        matched = candidate;
+      }
+
+      if (!matched) {
+        return this.resolveSingleActiveSession();
+      }
+
+      const target = this.store.getTarget(matched.target_id);
+      if (!target) {
+        return null;
+      }
+
+      return { session: matched, target };
+    }
+
+    const target = this.store.getTarget(session.target_id);
+    if (!target) {
       return null;
     }
 
+    return { session, target };
+  }
+
+  private resolveSingleActiveSession(): { session: Session; target: Target } | null {
+    const active = this.store.listActiveSessions();
+    if (active.length !== 1) {
+      return null;
+    }
+
+    const session = active[0];
     const target = this.store.getTarget(session.target_id);
     if (!target) {
       return null;
