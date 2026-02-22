@@ -194,7 +194,8 @@ export class AlexaAdapter {
           proxyOnly: true,
           bluetooth: false,
           notifications: false,
-          useWsMqtt: true,
+          // We only need command APIs; WS-MQTT can stall init on some networks.
+          useWsMqtt: false,
           cookieRefreshInterval: 0,
         },
         (err: Error | null | undefined) => {

@@ -256,7 +256,7 @@ export function mainPageHtml(adminUser: string): string {
           </select>
         </label>
         <label>Alexa Init Timeout (Sek.)
-          <input id="cfg-alexa-init-timeout" placeholder="20" />
+          <input id="cfg-alexa-init-timeout" placeholder="60" />
         </label>
         <label>Alexa Invocation Prefix
           <input id="cfg-alexa-prefix" placeholder="open air bridge and play token" />
