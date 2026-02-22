@@ -186,7 +186,7 @@ export async function createApp(): Promise<AppBundle> {
   const alexaAdapter = new AlexaAdapter({
     mode: config.alexaInvokeMode,
     cookiePath: config.alexaCookiePath,
-    invocationPrefix: process.env.AIRBRIDGE_ALEXA_INVOCATION_PREFIX,
+    invocationPrefix: config.alexaInvocationPrefix,
     initTimeoutMs: config.alexaInitTimeoutSeconds * 1000,
   });
 
@@ -198,7 +198,13 @@ export async function createApp(): Promise<AppBundle> {
     });
   }
 
-  const playback = new PlaybackService(store, alexaAdapter, config.streamBaseUrl, metrics);
+  const playback = new PlaybackService(store, alexaAdapter, config.streamBaseUrl, metrics, {
+    primaryInvocationPrefix: config.alexaInvocationPrefix,
+    skillInvocationName: config.alexaSkillInvocationName,
+    invocationPrefixFallbacks: config.alexaInvocationPrefixFallbacks,
+    skillInvokeTimeoutMs: config.alexaSkillInvokeTimeoutSeconds * 1000,
+    skillInvokeRetryCount: config.alexaSkillInvokeRetryCount,
+  });
   const setupService = new SetupService({
     envFilePath: config.setupEnvFilePath,
     cloudflaredConfigPath: config.setupCloudflaredFilePath,
@@ -382,6 +388,9 @@ export async function createApp(): Promise<AppBundle> {
       appId: process.env.AIRBRIDGE_SKILL_APP_ID,
       resolveToken: (token) => playback.resolveSessionToken(token),
       onSkillInvoke: (targetId, token, result, reason) => {
+        if (result === "success" && targetId > 0) {
+          playback.confirmSkillInvoke(targetId, token);
+        }
         store.addAudit("skill", "skill.invoke", targetId > 0 ? targetId : null, result, {
           token,
           reason,

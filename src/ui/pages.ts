@@ -261,6 +261,18 @@ export function mainPageHtml(adminUser: string): string {
         <label>Alexa Invocation Prefix
           <input id="cfg-alexa-prefix" placeholder="ask air bridge to play token" />
         </label>
+        <label>Alexa Skill Invocation Name
+          <input id="cfg-skill-invocation-name" placeholder="air bridge" />
+        </label>
+        <label>Alexa Prefix Fallbacks (|)
+          <input id="cfg-prefix-fallbacks" placeholder="frage air bridge spiele token|open air bridge and play token" />
+        </label>
+        <label>Skill Invoke Timeout (Sek.)
+          <input id="cfg-skill-timeout" placeholder="6" />
+        </label>
+        <label>Skill Invoke Retry Count
+          <input id="cfg-skill-retries" placeholder="2" />
+        </label>
         <label>Session Secret
           <input id="cfg-session-secret" placeholder="long random secret" />
         </label>
@@ -416,6 +428,10 @@ export function mainPageHtml(adminUser: string): string {
       AIRBRIDGE_ALEXA_INVOKE_MODE: 'cfg-alexa-mode',
       AIRBRIDGE_ALEXA_INIT_TIMEOUT_SECONDS: 'cfg-alexa-init-timeout',
       AIRBRIDGE_ALEXA_INVOCATION_PREFIX: 'cfg-alexa-prefix',
+      AIRBRIDGE_ALEXA_SKILL_INVOCATION_NAME: 'cfg-skill-invocation-name',
+      AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS: 'cfg-prefix-fallbacks',
+      AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS: 'cfg-skill-timeout',
+      AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT: 'cfg-skill-retries',
       AIRBRIDGE_SESSION_SECRET: 'cfg-session-secret',
       AIRBRIDGE_ADMIN_USER: 'cfg-admin-user',
       AIRBRIDGE_FFMPEG_BITRATE: 'cfg-ffmpeg-bitrate',

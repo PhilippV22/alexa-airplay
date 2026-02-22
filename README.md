@@ -84,10 +84,21 @@ sudo systemctl enable --now cloudflared-airbridge.service
 - Optional App-ID-Pruefung: `AIRBRIDGE_SKILL_APP_ID`
 - Default Invocation Prefix fuer API-Aufruf: `ask air bridge to play token`
 
+Wichtige Skill-Invoke-Umgebungsvariablen:
+
+- `AIRBRIDGE_ALEXA_INVOCATION_PREFIX` (primaerer Prefix)
+- `AIRBRIDGE_ALEXA_SKILL_INVOCATION_NAME` (Default: `air bridge`)
+- `AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS` (optionale Prefixe, `|`-getrennt)
+- `AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS` (Default: `6`)
+- `AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT` (Default: `2`)
+
 Troubleshooting:
 
 - Wenn `alexa.invoke` erfolgreich ist, aber kein Audio startet, pruefe im Audit auf `skill.invoke`.
-- Fehlt `skill.invoke`, wird der Skill nicht getriggert (Skill/Locale/Invocation prüfen).
+- Fehlt `skill.invoke`, fuehrt AirBridge automatisch Prefix-Retries aus (Reihenfolge: primaer -> User-Fallbacks -> built-in Fallbacks).
+- Erfolgsfall im Audit: `alexa.invoke success` -> `skill.invoke success` -> `hls.request success`.
+- Wenn nach allen Versuchen kein Skill-Trigger kommt, endet die Session mit `ALEXA_INVOKE_FAILED` und `reason: skill_not_invoked`.
+- Bei Locale-Problemen Prefix auf die Sprachregion anpassen (z. B. de-DE: `oeffne air bridge und spiele token`).
 
 ## REST API
 

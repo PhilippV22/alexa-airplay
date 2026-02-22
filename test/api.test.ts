@@ -26,6 +26,11 @@ describe("airbridge api", () => {
     process.env.AIRBRIDGE_ADMIN_USER = "admin";
     process.env.AIRBRIDGE_SPAWN_PROCESSES = "false";
     process.env.AIRBRIDGE_ALEXA_INVOKE_MODE = "mock";
+    process.env.AIRBRIDGE_ALEXA_INVOCATION_PREFIX = "ask air bridge to play token";
+    process.env.AIRBRIDGE_ALEXA_SKILL_INVOCATION_NAME = "air bridge";
+    process.env.AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS = "";
+    process.env.AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS = "1";
+    process.env.AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT = "0";
     process.env.AIRBRIDGE_SETUP_ENV_FILE = path.join(tmpRoot, "airbridge.env");
     process.env.AIRBRIDGE_SETUP_CLOUDFLARED_FILE = path.join(tmpRoot, "cloudflared.yml");
     process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE = path.join(tmpRoot, "alexa-cookie.txt");
@@ -53,6 +58,11 @@ describe("airbridge api", () => {
     delete process.env.AIRBRIDGE_ADMIN_USER;
     delete process.env.AIRBRIDGE_SPAWN_PROCESSES;
     delete process.env.AIRBRIDGE_ALEXA_INVOKE_MODE;
+    delete process.env.AIRBRIDGE_ALEXA_INVOCATION_PREFIX;
+    delete process.env.AIRBRIDGE_ALEXA_SKILL_INVOCATION_NAME;
+    delete process.env.AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS;
+    delete process.env.AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS;
+    delete process.env.AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT;
     delete process.env.AIRBRIDGE_SETUP_ENV_FILE;
     delete process.env.AIRBRIDGE_SETUP_CLOUDFLARED_FILE;
     delete process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE;
@@ -128,6 +138,61 @@ describe("airbridge api", () => {
     expect(typeof res.body.skipped).toBe("number");
   });
 
+  it("marks session as playing after successful skill callback", async () => {
+    const agent = request.agent(bundle.app);
+
+    await agent
+      .post("/api/auth/login")
+      .send({ username: "admin", password: "test-password" })
+      .expect(200);
+
+    const createRes = await agent.post("/api/targets").send({
+      name: "Wohnzimmer Echo",
+      type: "device",
+      alexa_device_id: "A3TESTSERIAL",
+      enabled: true,
+    });
+    expect(createRes.status).toBe(201);
+    const targetId = createRes.body.target.id as number;
+
+    const startRes = await request(bundle.app).post(`/internal/events/play-start/${targetId}`).send({});
+    expect(startRes.status).toBe(200);
+
+    const sessionsBefore = await agent.get("/api/sessions");
+    expect(sessionsBefore.status).toBe(200);
+    const activeSession = sessionsBefore.body.sessions.find((session: { target_id: number }) => {
+      return session.target_id === targetId;
+    });
+    if (!activeSession) {
+      throw new Error("Expected active session for target");
+    }
+    expect(activeSession.state).toBe("buffering");
+
+    const skillRes = await request(bundle.app).post("/alexa/skill").send({
+      request: {
+        type: "IntentRequest",
+        intent: {
+          name: "StartStreamIntent",
+          slots: {
+            token: {
+              value: activeSession.stream_token,
+            },
+          },
+        },
+      },
+    });
+
+    expect(skillRes.status).toBe(200);
+    expect(Array.isArray(skillRes.body.response?.directives)).toBe(true);
+
+    const sessionsAfter = await agent.get("/api/sessions");
+    expect(sessionsAfter.status).toBe(200);
+    const updated = sessionsAfter.body.sessions.find((session: { id: number }) => {
+      return session.id === activeSession.id;
+    });
+    expect(updated?.state).toBe("playing");
+  });
+
   it("writes setup config and persists it to setup env file", async () => {
     const agent = request.agent(bundle.app);
 
@@ -141,19 +206,33 @@ describe("airbridge api", () => {
         AIRBRIDGE_STREAM_BASE_URL: "https://updated.example.com",
         AIRBRIDGE_TRUST_PROXY: true,
         AIRBRIDGE_PORT: 3333,
+        AIRBRIDGE_ALEXA_SKILL_INVOCATION_NAME: "air bridge",
+        AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS: "frage air bridge spiele token",
+        AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS: 6,
+        AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT: 2,
       },
     });
 
     expect(updateRes.status).toBe(200);
     expect(updateRes.body.values.AIRBRIDGE_STREAM_BASE_URL).toBe("https://updated.example.com");
+    expect(updateRes.body.values.AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT).toBe("2");
 
     const setupConfigRes = await agent.get("/api/setup/config");
     expect(setupConfigRes.status).toBe(200);
     expect(setupConfigRes.body.values.AIRBRIDGE_PORT).toBe("3333");
+    expect(setupConfigRes.body.values.AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS).toBe(
+      "frage air bridge spiele token",
+    );
 
     const envFile = fs.readFileSync(process.env.AIRBRIDGE_SETUP_ENV_FILE as string, "utf8");
     expect(envFile).toContain("AIRBRIDGE_STREAM_BASE_URL=https://updated.example.com");
     expect(envFile).toContain("AIRBRIDGE_PORT=3333");
+    expect(envFile).toContain("AIRBRIDGE_ALEXA_SKILL_INVOCATION_NAME=\"air bridge\"");
+    expect(envFile).toContain(
+      "AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS=\"frage air bridge spiele token\"",
+    );
+    expect(envFile).toContain("AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS=6");
+    expect(envFile).toContain("AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT=2");
   });
 
   it("updates admin password as hash via setup endpoint", async () => {

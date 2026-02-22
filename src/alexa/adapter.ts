@@ -6,6 +6,10 @@ interface InvokeError extends Error {
   code?: string;
 }
 
+export interface InvokeStreamOptions {
+  invocationPrefix?: string;
+}
+
 export interface AlexaDeviceSummary {
   serialNumber: string;
   name: string;
@@ -153,7 +157,12 @@ export class AlexaAdapter {
     }
   }
 
-  async invokeStream(target: Target, streamToken: string, streamUrl: string): Promise<void> {
+  async invokeStream(
+    target: Target,
+    streamToken: string,
+    streamUrl: string,
+    options?: InvokeStreamOptions,
+  ): Promise<void> {
     if (this.mode === "mock") {
       return;
     }
@@ -162,7 +171,9 @@ export class AlexaAdapter {
       throw codeError("ALEXA_INVOKE_FAILED", "Target has no alexa_device_id");
     }
 
-    const utterance = `${this.invocationPrefix} ${streamToken}`;
+    void streamUrl;
+    const prefix = options?.invocationPrefix?.trim() || this.invocationPrefix;
+    const utterance = `${prefix} ${streamToken}`.trim();
     let lastError: string | null = null;
 
     if (!this.initialized) {
