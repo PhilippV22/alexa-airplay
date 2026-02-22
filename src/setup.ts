@@ -210,25 +210,15 @@ export class SetupService {
       throw new AppError(400, "BAD_REQUEST", "Cookie content cannot be empty");
     }
 
-    if (preferEncrypted && this.options.allowCredentialEncryption) {
-      const encryptedResult = this.tryWriteEncryptedCookie(cookie);
-      if (encryptedResult.ok) {
-        const envMap = this.readEnvMap();
-        envMap.AIRBRIDGE_ALEXA_COOKIE_PATH = `/run/credentials/${this.options.serviceName}/alexa_cookie`;
-        envMap.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION = "true";
-        this.writeEnvMap(envMap);
-        return {
-          mode: "encrypted",
-          path: this.options.encryptedAlexaCookiePath,
-        };
-      }
-    }
+    // Keep setup robust by default: plain cookie file path is always directly readable by the service.
+    void preferEncrypted;
 
     fs.mkdirSync(path.dirname(this.options.plainAlexaCookiePath), { recursive: true });
     fs.writeFileSync(this.options.plainAlexaCookiePath, `${cookie}\n`, "utf8");
 
     const envMap = this.readEnvMap();
     envMap.AIRBRIDGE_ALEXA_COOKIE_PATH = this.options.plainAlexaCookiePath;
+    envMap.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION = "false";
     this.writeEnvMap(envMap);
 
     return {

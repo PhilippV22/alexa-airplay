@@ -281,9 +281,6 @@ export function mainPageHtml(adminUser: string): string {
         <label style="display:flex; align-items:center; gap:8px; min-width:auto; color:var(--text);">
           <input type="checkbox" id="cfg-spawn-processes" /> Shairport/FFmpeg Prozesse starten
         </label>
-        <label style="display:flex; align-items:center; gap:8px; min-width:auto; color:var(--text);">
-          <input type="checkbox" id="cfg-allow-enc" /> Cookie Verschluesselung bevorzugen
-        </label>
         <button class="success" id="save-config">Konfiguration speichern</button>
       </div>
       <p class="msg" id="config-message"></p>
@@ -297,7 +294,35 @@ export function mainPageHtml(adminUser: string): string {
       </div>
       <p class="msg" id="password-message"></p>
 
-      <h3>Alexa Cookie</h3>
+      <h3>Alexa Cookie Wizard (Automatisch)</h3>
+      <div class="row">
+        <label>Amazon Region Domain
+          <select id="alexa-wizard-amazon-page">
+            <option value="amazon.de">amazon.de</option>
+            <option value="amazon.com">amazon.com</option>
+            <option value="amazon.co.uk">amazon.co.uk</option>
+            <option value="amazon.fr">amazon.fr</option>
+            <option value="amazon.it">amazon.it</option>
+            <option value="amazon.es">amazon.es</option>
+            <option value="amazon.co.jp">amazon.co.jp</option>
+          </select>
+        </label>
+        <label>Proxy Host (wie im Browser aufgerufen)
+          <input id="alexa-wizard-proxy-host" placeholder="192.168.1.10" />
+        </label>
+        <label>Proxy Port
+          <input id="alexa-wizard-proxy-port" value="3457" />
+        </label>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button class="success" id="start-alexa-wizard">Wizard starten</button>
+        <button class="secondary" id="refresh-alexa-wizard">Wizard Status</button>
+        <button class="danger" id="stop-alexa-wizard">Wizard stoppen</button>
+      </div>
+      <p class="msg" id="alexa-wizard-message"></p>
+      <div class="status-item" id="alexa-wizard-status">Kein Wizard aktiv.</div>
+
+      <h3>Alexa Cookie (manueller Fallback)</h3>
       <label>
         Cookie Inhalt
         <textarea id="alexa-cookie" placeholder="Alexa Session Cookie hier einfuegen"></textarea>
@@ -389,6 +414,7 @@ export function mainPageHtml(adminUser: string): string {
       AIRBRIDGE_SHAIRPORT_BIN: 'cfg-shairport-bin',
       AIRBRIDGE_FFMPEG_BIN: 'cfg-ffmpeg-bin'
     };
+    var alexaWizardPollTimer = null;
 
     function setMessage(id, text, isError, isSuccess) {
       var el = document.getElementById(id);
@@ -441,6 +467,12 @@ export function mainPageHtml(adminUser: string): string {
       renderSetupStatus(statusBody.status);
       fillSetupConfig(configBody.values || {});
       document.getElementById('cloudflared-config').value = configBody.cloudflaredConfig || '';
+
+      if (!document.getElementById('alexa-wizard-proxy-host').value) {
+        document.getElementById('alexa-wizard-proxy-host').value = window.location.hostname;
+      }
+
+      await refreshAlexaWizardStatus();
       setMessage('setup-message', 'Setup geladen.', false, true);
     }
 
@@ -483,7 +515,6 @@ export function mainPageHtml(adminUser: string): string {
 
       document.getElementById('cfg-trust-proxy').checked = parseBool(values.AIRBRIDGE_TRUST_PROXY);
       document.getElementById('cfg-spawn-processes').checked = parseBool(values.AIRBRIDGE_SPAWN_PROCESSES);
-      document.getElementById('cfg-allow-enc').checked = parseBool(values.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION);
     }
 
     function collectSetupConfig() {
@@ -497,7 +528,7 @@ export function mainPageHtml(adminUser: string): string {
 
       values.AIRBRIDGE_TRUST_PROXY = document.getElementById('cfg-trust-proxy').checked;
       values.AIRBRIDGE_SPAWN_PROCESSES = document.getElementById('cfg-spawn-processes').checked;
-      values.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION = document.getElementById('cfg-allow-enc').checked;
+      values.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION = false;
       return values;
     }
 
@@ -555,7 +586,7 @@ export function mainPageHtml(adminUser: string): string {
         method: 'POST',
         body: JSON.stringify({
           cookie: cookie,
-          preferEncrypted: document.getElementById('cfg-allow-enc').checked
+          preferEncrypted: false
         })
       });
 
@@ -568,6 +599,140 @@ export function mainPageHtml(adminUser: string): string {
       document.getElementById('alexa-cookie').value = '';
       setMessage('cookie-message', 'Cookie gespeichert (' + body.result.mode + '). Danach Neustart ausfuehren.', false, true);
       await loadSetup();
+    }
+
+    function stopAlexaWizardPolling() {
+      if (alexaWizardPollTimer) {
+        clearInterval(alexaWizardPollTimer);
+        alexaWizardPollTimer = null;
+      }
+    }
+
+    function renderAlexaWizardState(state) {
+      var statusEl = document.getElementById('alexa-wizard-status');
+      var statusText = 'Status: ' + (state.status || 'unknown');
+      if (state.message) {
+        statusText += ' | ' + state.message;
+      }
+      if (state.error) {
+        statusText += ' | Error: ' + state.error;
+      }
+      if (state.loginUrl) {
+        statusText += ' | Login URL: ' + state.loginUrl;
+      }
+      statusEl.textContent = statusText;
+    }
+
+    async function refreshAlexaWizardStatus() {
+      var res = await api('/api/setup/alexa-cookie/wizard/status');
+      if (!res.ok) {
+        var errBody = await res.json().catch(function () { return {}; });
+        setMessage('alexa-wizard-message', errBody.message || 'Wizard Status konnte nicht geladen werden', true, false);
+        return;
+      }
+
+      var body = await res.json();
+      var state = body.state || {};
+      renderAlexaWizardState(state);
+
+      if (state.status === 'awaiting_login' && state.loginUrl) {
+        setMessage('alexa-wizard-message', 'Amazon Login in neuem Tab oeffnen und anmelden. Cookie wird automatisch gespeichert.', false, true);
+      } else if (state.status === 'completed') {
+        setMessage('alexa-wizard-message', state.message || 'Cookie automatisch gespeichert. Bitte AirBridge neu starten.', false, true);
+      } else if (state.status === 'failed') {
+        setMessage('alexa-wizard-message', state.error || state.message || 'Wizard fehlgeschlagen', true, false);
+      } else if (state.status === 'stopped') {
+        setMessage('alexa-wizard-message', state.message || 'Wizard gestoppt.', false, true);
+      } else if (state.status === 'starting') {
+        setMessage('alexa-wizard-message', 'Wizard startet ...', false, false);
+      }
+
+      if (state.status === 'completed' || state.status === 'failed' || state.status === 'stopped' || state.status === 'idle') {
+        stopAlexaWizardPolling();
+        if (state.status === 'completed') {
+          await loadSetup();
+        }
+      }
+    }
+
+    function startAlexaWizardPolling() {
+      stopAlexaWizardPolling();
+      alexaWizardPollTimer = setInterval(function () {
+        refreshAlexaWizardStatus().catch(function () {});
+      }, 2000);
+    }
+
+    function defaultBaseAmazonPage(amazonPage) {
+      if (amazonPage === 'amazon.co.jp') {
+        return 'amazon.co.jp';
+      }
+      return 'amazon.com';
+    }
+
+    function defaultLanguage(amazonPage) {
+      if (amazonPage === 'amazon.de') return 'de-DE';
+      if (amazonPage === 'amazon.co.uk') return 'en-GB';
+      if (amazonPage === 'amazon.fr') return 'fr-FR';
+      if (amazonPage === 'amazon.it') return 'it-IT';
+      if (amazonPage === 'amazon.es') return 'es-ES';
+      if (amazonPage === 'amazon.co.jp') return 'ja-JP';
+      return 'en-US';
+    }
+
+    async function startAlexaWizard() {
+      var amazonPage = document.getElementById('alexa-wizard-amazon-page').value;
+      var proxyHostInput = document.getElementById('alexa-wizard-proxy-host').value.trim();
+      var proxyPortInput = document.getElementById('alexa-wizard-proxy-port').value.trim();
+      var proxyPort = Number.parseInt(proxyPortInput || '3457', 10);
+      if (Number.isNaN(proxyPort) || proxyPort < 1 || proxyPort > 65535) {
+        setMessage('alexa-wizard-message', 'Proxy Port ist ungueltig.', true, false);
+        return;
+      }
+
+      setMessage('alexa-wizard-message', 'Starte Wizard ...');
+      var res = await api('/api/setup/alexa-cookie/wizard/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          amazonPage: amazonPage,
+          baseAmazonPage: defaultBaseAmazonPage(amazonPage),
+          acceptLanguage: defaultLanguage(amazonPage),
+          proxyHost: proxyHostInput || undefined,
+          proxyPort: proxyPort,
+          preferEncrypted: false
+        })
+      });
+
+      var body = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        setMessage('alexa-wizard-message', body.message || 'Wizard konnte nicht gestartet werden', true, false);
+        return;
+      }
+
+      renderAlexaWizardState(body.state || {});
+      setMessage('alexa-wizard-message', 'Wizard gestartet. Login-Fenster wird geoeffnet ...', false, true);
+
+      var loginUrl = body.state && body.state.loginUrl;
+      if (loginUrl) {
+        window.open(loginUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      startAlexaWizardPolling();
+      await refreshAlexaWizardStatus();
+    }
+
+    async function stopAlexaWizard() {
+      var res = await api('/api/setup/alexa-cookie/wizard/stop', {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+      var body = await res.json().catch(function () { return {}; });
+      if (!res.ok) {
+        setMessage('alexa-wizard-message', body.message || 'Wizard konnte nicht gestoppt werden', true, false);
+        return;
+      }
+      stopAlexaWizardPolling();
+      renderAlexaWizardState(body.state || {});
+      setMessage('alexa-wizard-message', 'Wizard gestoppt.', false, true);
     }
 
     async function saveCloudflaredConfig() {
@@ -772,6 +937,24 @@ export function mainPageHtml(adminUser: string): string {
     document.getElementById('save-cookie').onclick = function () {
       saveAlexaCookie().catch(function (error) {
         setMessage('cookie-message', error.message || 'Fehler beim Speichern', true, false);
+      });
+    };
+
+    document.getElementById('start-alexa-wizard').onclick = function () {
+      startAlexaWizard().catch(function (error) {
+        setMessage('alexa-wizard-message', error.message || 'Wizard Start fehlgeschlagen', true, false);
+      });
+    };
+
+    document.getElementById('refresh-alexa-wizard').onclick = function () {
+      refreshAlexaWizardStatus().catch(function (error) {
+        setMessage('alexa-wizard-message', error.message || 'Wizard Status fehlgeschlagen', true, false);
+      });
+    };
+
+    document.getElementById('stop-alexa-wizard').onclick = function () {
+      stopAlexaWizard().catch(function (error) {
+        setMessage('alexa-wizard-message', error.message || 'Wizard Stop fehlgeschlagen', true, false);
       });
     };
 

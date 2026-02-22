@@ -123,7 +123,10 @@ else
 fi
 npm run build
 
-chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}" "${DATA_DIR}" "${RUN_DIR}"
+chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}" "${DATA_DIR}"
+# /run may be tmpfs-managed and can disappear during long installs; recreate before chown.
+install -d -o "${APP_USER}" -g "${APP_GROUP}" "${RUN_DIR}"
+chown -R "${APP_USER}:${APP_GROUP}" "${RUN_DIR}"
 
 install -m 0644 deploy/systemd/airbridge.service /etc/systemd/system/airbridge.service
 install -m 0644 deploy/systemd/cloudflared-airbridge.service /etc/systemd/system/cloudflared-airbridge.service
@@ -166,6 +169,9 @@ AIRBRIDGE_SETUP_ALEXA_COOKIE_ENCRYPTED_FILE=/etc/credstore.encrypted/airbridge_a
 AIRBRIDGE_SERVICE_NAME=airbridge.service
 AIRBRIDGE_CLOUDFLARED_SERVICE_NAME=cloudflared-airbridge.service
 AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION=false
+AIRBRIDGE_ALEXA_COOKIE_WIZARD_PROXY_PORT=3457
+AIRBRIDGE_ALEXA_COOKIE_WIZARD_TIMEOUT_SECONDS=600
+AIRBRIDGE_ALEXA_COOKIE_WIZARD_MOCK=false
 ENV
 
   echo "Generated initial admin password: ${ADMIN_PASSWORD}"

@@ -15,6 +15,7 @@ import { AppError } from "./errors";
 import { ProcessManager } from "./process/manager";
 import { PlaybackService } from "./playback";
 import { AlexaAdapter } from "./alexa/adapter";
+import { AlexaCookieWizardService } from "./alexa/cookieWizard";
 import { createSkillRouter } from "./alexa/skill";
 import { createInternalEventsRouter } from "./internal/events";
 import { Target } from "./types";
@@ -65,6 +66,27 @@ const setupApplySchema = z.object({
   restart: z.boolean().optional(),
 });
 
+const setupAlexaCookieWizardStartSchema = z.object({
+  amazonPage: z.string().min(3).optional(),
+  baseAmazonPage: z.string().min(3).optional(),
+  acceptLanguage: z.string().min(2).optional(),
+  proxyHost: z.string().min(1).optional(),
+  proxyPort: z.preprocess(
+    (value) => {
+      if (value === undefined || value === null || value === "") {
+        return undefined;
+      }
+      if (typeof value === "string") {
+        const parsed = Number.parseInt(value, 10);
+        return Number.isNaN(parsed) ? value : parsed;
+      }
+      return value;
+    },
+    z.number().int().min(1).max(65535).optional(),
+  ),
+  preferEncrypted: z.boolean().optional(),
+});
+
 interface AppBundle {
   app: express.Express;
   store: Store;
@@ -81,6 +103,53 @@ function sanitizeFile(fileName: string): string | null {
     return null;
   }
   return fileName;
+}
+
+function inferBaseAmazonPage(amazonPage: string): string {
+  if (amazonPage.endsWith("amazon.co.jp")) {
+    return "amazon.co.jp";
+  }
+  return "amazon.com";
+}
+
+function inferAcceptLanguage(amazonPage: string): string {
+  if (amazonPage.endsWith("amazon.de")) {
+    return "de-DE";
+  }
+  if (amazonPage.endsWith("amazon.co.uk")) {
+    return "en-GB";
+  }
+  if (amazonPage.endsWith("amazon.fr")) {
+    return "fr-FR";
+  }
+  if (amazonPage.endsWith("amazon.it")) {
+    return "it-IT";
+  }
+  if (amazonPage.endsWith("amazon.es")) {
+    return "es-ES";
+  }
+  if (amazonPage.endsWith("amazon.co.jp")) {
+    return "ja-JP";
+  }
+  return "en-US";
+}
+
+function inferProxyHost(req: Request): string {
+  const forwardedHost = req.headers["x-forwarded-host"];
+  if (typeof forwardedHost === "string" && forwardedHost.trim()) {
+    return forwardedHost.split(",")[0].trim().split(":")[0];
+  }
+
+  const hostHeader = req.headers.host;
+  if (hostHeader) {
+    return hostHeader.split(":")[0];
+  }
+
+  if (req.hostname) {
+    return req.hostname;
+  }
+
+  return "127.0.0.1";
 }
 
 export async function createApp(): Promise<AppBundle> {
@@ -117,6 +186,10 @@ export async function createApp(): Promise<AppBundle> {
     serviceName: config.serviceName,
     cloudflaredServiceName: config.cloudflaredServiceName,
     allowCredentialEncryption: config.setupAllowCredentialEncryption,
+  });
+  const alexaCookieWizard = new AlexaCookieWizardService(setupService, {
+    timeoutMs: config.alexaCookieWizardTimeoutSeconds * 1000,
+    mockMode: config.alexaCookieWizardMock,
   });
 
   const processManager = new ProcessManager({
@@ -384,6 +457,53 @@ export async function createApp(): Promise<AppBundle> {
     }
   });
 
+  api.post("/setup/alexa-cookie/wizard/start", async (req, res, next) => {
+    try {
+      const body = setupAlexaCookieWizardStartSchema.parse(req.body);
+      const amazonPage = (body.amazonPage ?? "amazon.de").trim();
+      const baseAmazonPage = (body.baseAmazonPage ?? inferBaseAmazonPage(amazonPage)).trim();
+      const acceptLanguage = (body.acceptLanguage ?? inferAcceptLanguage(amazonPage)).trim();
+      const proxyHost = (body.proxyHost ?? inferProxyHost(req)).trim();
+      const proxyPort = body.proxyPort ?? config.alexaCookieWizardProxyPort;
+      const preferEncrypted = body.preferEncrypted ?? false;
+
+      const state = await alexaCookieWizard.start({
+        amazonPage,
+        baseAmazonPage,
+        acceptLanguage,
+        proxyHost,
+        proxyPort,
+        preferEncrypted,
+      });
+
+      store.addAudit(safeActor(req), "setup.alexa_cookie_wizard.start", null, "success", {
+        amazonPage,
+        proxyHost,
+        proxyPort,
+      });
+
+      res.json({ ok: true, state });
+    } catch (error) {
+      store.addAudit(safeActor(req), "setup.alexa_cookie_wizard.start", null, "failure", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      next(error);
+    }
+  });
+
+  api.get("/setup/alexa-cookie/wizard/status", (_req, res) => {
+    res.json({
+      ok: true,
+      state: alexaCookieWizard.getStatus(),
+    });
+  });
+
+  api.post("/setup/alexa-cookie/wizard/stop", (req, res) => {
+    const state = alexaCookieWizard.stop();
+    store.addAudit(safeActor(req), "setup.alexa_cookie_wizard.stop", null, "success", {});
+    res.json({ ok: true, state });
+  });
+
   api.put("/setup/cloudflared", (req, res, next) => {
     try {
       const body = setupCloudflaredSchema.parse(req.body);
@@ -602,16 +722,12 @@ export async function createApp(): Promise<AppBundle> {
 
   app.get("/health/ready", (_req, res) => {
     const ready = alexaAdapter.isInitialized();
-    if (!ready && config.alexaInvokeMode !== "mock") {
-      res.status(503).json({ status: "not_ready", reason: "alexa_adapter_not_initialized" });
-      return;
-    }
-
     res.json({
-      status: "ready",
+      status: ready || config.alexaInvokeMode === "mock" ? "ready" : "degraded",
       db: "ok",
       processManager: "ok",
       alexaMode: config.alexaInvokeMode,
+      alexaAdapterInitialized: ready,
     });
   });
 

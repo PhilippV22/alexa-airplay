@@ -89,6 +89,9 @@ export const config = {
   cloudflaredServiceName:
     process.env.AIRBRIDGE_CLOUDFLARED_SERVICE_NAME ?? "cloudflared-airbridge.service",
   setupAllowCredentialEncryption: envBool("AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION", false),
+  alexaCookieWizardProxyPort: envInt("AIRBRIDGE_ALEXA_COOKIE_WIZARD_PROXY_PORT", 3457),
+  alexaCookieWizardTimeoutSeconds: envInt("AIRBRIDGE_ALEXA_COOKIE_WIZARD_TIMEOUT_SECONDS", 600),
+  alexaCookieWizardMock: envBool("AIRBRIDGE_ALEXA_COOKIE_WIZARD_MOCK", false),
 };
 
 if (!config.adminPasswordHash && !config.adminPasswordPlain) {

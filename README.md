@@ -14,7 +14,8 @@ Die Web-UI kann jetzt das komplette Setup erledigen:
 
 - Basis-Konfiguration (`airbridge.env`) bearbeiten
 - Admin-Passwort (Argon2id Hash) setzen
-- Alexa-Cookie speichern (verschluesselt bevorzugt, Fallback plain)
+- Alexa-Cookie Wizard: Amazon Login automatisch ueber Proxy-Flow erfassen
+- Alexa-Cookie manueller Fallback als Textfeld
 - Cloudflared-Konfiguration bearbeiten
 - AirBridge-Neustart direkt aus der Web-UI anstossen
 - Targets/Sessions/Audit weiterhin komplett verwalten
@@ -64,8 +65,10 @@ Nach dem Install:
 
 1. Web-UI aufrufen: `http://<host>:3000`
 2. Mit generiertem Admin-Passwort aus Script-Output einloggen
-3. Unter `System Setup` Stream-URL, Alexa-Cookie und Cloudflared konfigurieren
-4. `Aenderungen anwenden (AirBridge Neustart)` klicken
+3. Unter `System Setup` Stream-URL setzen
+4. `Alexa Cookie Wizard` starten und Amazon Login im Wizard-Fenster abschliessen
+5. Optional Cloudflared konfigurieren
+6. `Aenderungen anwenden (AirBridge Neustart)` klicken
 
 Optional Cloudflared starten (nur falls installiert):
 
@@ -94,6 +97,9 @@ Setup:
 - `PUT /api/setup/config`
 - `POST /api/setup/admin-password`
 - `POST /api/setup/alexa-cookie`
+- `POST /api/setup/alexa-cookie/wizard/start`
+- `GET /api/setup/alexa-cookie/wizard/status`
+- `POST /api/setup/alexa-cookie/wizard/stop`
 - `PUT /api/setup/cloudflared`
 - `POST /api/setup/apply` (`{"restart": true}`)
 
@@ -116,7 +122,6 @@ Runtime:
 - Env: `/etc/airbridge/airbridge.env`
 - Cloudflared Config: `/etc/airbridge/cloudflared.yml`
 - Alexa Cookie (Default): `/etc/airbridge/alexa-cookie.txt`
-- Encrypted Cookie (optional, advanced): `/etc/credstore.encrypted/airbridge_alexa_cookie`
 - DB: `/var/lib/airbridge/db/airbridge.sqlite`
 - HLS: `/var/lib/airbridge/hls/<target-id>/`
 - FIFO: `/run/airbridge/fifo/<target-id>.pcm`

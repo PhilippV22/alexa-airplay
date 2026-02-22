@@ -31,6 +31,7 @@ describe("airbridge api", () => {
     process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE = path.join(tmpRoot, "alexa-cookie.txt");
     process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_ENCRYPTED_FILE = path.join(tmpRoot, "airbridge_alexa_cookie");
     process.env.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION = "false";
+    process.env.AIRBRIDGE_ALEXA_COOKIE_WIZARD_MOCK = "true";
 
     vi.resetModules();
     const server = await import("../src/server");
@@ -57,6 +58,7 @@ describe("airbridge api", () => {
     delete process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE;
     delete process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_ENCRYPTED_FILE;
     delete process.env.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION;
+    delete process.env.AIRBRIDGE_ALEXA_COOKIE_WIZARD_MOCK;
   });
 
   it("requires auth for protected endpoints", async () => {
@@ -155,5 +157,37 @@ describe("airbridge api", () => {
     const envFile = fs.readFileSync(process.env.AIRBRIDGE_SETUP_ENV_FILE as string, "utf8");
     expect(envFile).toContain("AIRBRIDGE_ADMIN_PASSWORD_HASH=");
     expect(envFile).not.toContain("AIRBRIDGE_ADMIN_PASSWORD=");
+  });
+
+  it("completes alexa cookie wizard in mock mode", async () => {
+    const agent = request.agent(bundle.app);
+
+    await agent
+      .post("/api/auth/login")
+      .send({ username: "admin", password: "test-password" })
+      .expect(200);
+
+    const startRes = await agent.post("/api/setup/alexa-cookie/wizard/start").send({
+      amazonPage: "amazon.de",
+      proxyHost: "127.0.0.1",
+      proxyPort: 3457,
+    });
+
+    expect(startRes.status).toBe(200);
+
+    let status = "starting";
+    for (let i = 0; i < 10; i += 1) {
+      const statusRes = await agent.get("/api/setup/alexa-cookie/wizard/status");
+      status = statusRes.body.state.status;
+      if (status === "completed") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    expect(status).toBe("completed");
+
+    const cookieFile = fs.readFileSync(process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE as string, "utf8");
+    expect(cookieFile).toContain("mock-cookie");
   });
 });
