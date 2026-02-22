@@ -14,7 +14,10 @@
           "samples": [
             "play token {token}",
             "start token {token}",
-            "stream token {token}"
+            "stream token {token}",
+            "spiele token {token}",
+            "starte token {token}",
+            "streame token {token}"
           ]
         },
         {

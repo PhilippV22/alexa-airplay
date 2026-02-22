@@ -82,6 +82,12 @@ sudo systemctl enable --now cloudflared-airbridge.service
 - Interaction Model: `deploy/ask/interaction-model.json`
 - Skill Endpoint: `https://skill.<deine-domain>/alexa/skill`
 - Optional App-ID-Pruefung: `AIRBRIDGE_SKILL_APP_ID`
+- Default Invocation Prefix fuer API-Aufruf: `ask air bridge to play token`
+
+Troubleshooting:
+
+- Wenn `alexa.invoke` erfolgreich ist, aber kein Audio startet, pruefe im Audit auf `skill.invoke`.
+- Fehlt `skill.invoke`, wird der Skill nicht getriggert (Skill/Locale/Invocation prüfen).
 
 ## REST API
 

@@ -259,7 +259,7 @@ export function mainPageHtml(adminUser: string): string {
           <input id="cfg-alexa-init-timeout" placeholder="60" />
         </label>
         <label>Alexa Invocation Prefix
-          <input id="cfg-alexa-prefix" placeholder="open air bridge and play token" />
+          <input id="cfg-alexa-prefix" placeholder="ask air bridge to play token" />
         </label>
         <label>Session Secret
           <input id="cfg-session-secret" placeholder="long random secret" />

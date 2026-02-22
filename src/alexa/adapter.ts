@@ -107,7 +107,7 @@ export class AlexaAdapter {
   }) {
     this.mode = params.mode;
     this.cookiePath = params.cookiePath;
-    this.invocationPrefix = params.invocationPrefix ?? "open air bridge and play token";
+    this.invocationPrefix = params.invocationPrefix ?? "ask air bridge to play token";
     this.initTimeoutMs = params.initTimeoutMs ?? 15_000;
   }
 
