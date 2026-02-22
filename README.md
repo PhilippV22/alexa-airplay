@@ -53,6 +53,7 @@ Was das Script macht:
 
 - installiert Pflichtpakete (Node.js 22, ffmpeg, shairport-sync)
 - versucht optional `cloudflared` zu installieren, falls in apt verfuegbar
+- nutzt `npm ci` und faellt bei Lockfile-Problemen automatisch auf `npm install` zurueck
 - deployed nach `/opt/airbridge`
 - legt User/Group `airbridge` an
 - erzeugt `/etc/airbridge/airbridge.env` mit sicheren Defaults

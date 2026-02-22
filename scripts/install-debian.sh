@@ -91,7 +91,12 @@ rsync -a --delete \
   "${REPO_DIR}/" "${APP_DIR}/"
 
 cd "${APP_DIR}"
-npm ci
+if npm ci; then
+  echo "npm ci succeeded."
+else
+  echo "Warning: npm ci failed (lockfile mismatch). Falling back to npm install." >&2
+  npm install
+fi
 npm run build
 
 chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}" "${DATA_DIR}" "${RUN_DIR}"
