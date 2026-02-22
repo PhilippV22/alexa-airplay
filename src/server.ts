@@ -265,6 +265,28 @@ export async function createApp(): Promise<AppBundle> {
     }
   };
 
+  const ensureAlexaAdapterInitialized = async (
+    actor: string,
+    source: string,
+  ): Promise<void> => {
+    if (config.alexaInvokeMode !== "alexa_remote2") {
+      return;
+    }
+
+    if (alexaAdapter.isInitialized()) {
+      return;
+    }
+
+    try {
+      await alexaAdapter.init();
+      store.addAudit(actor, "alexa.init", null, "success", { source });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      store.addAudit(actor, "alexa.init", null, "failure", { source, error: message });
+      throw new AppError(409, "ALEXA_AUTH_FAILED", message);
+    }
+  };
+
   const app = express();
   app.set("trust proxy", config.trustProxy);
 
@@ -457,18 +479,42 @@ export async function createApp(): Promise<AppBundle> {
     }
   });
 
-  api.post("/setup/alexa-cookie", (req, res, next) => {
+  api.post("/setup/alexa-cookie", async (req, res, next) => {
     try {
       const body = setupAlexaCookieSchema.parse(req.body);
       const result = setupService.setAlexaCookie(body.cookie, body.preferEncrypted ?? true);
+      let initState: { attempted: boolean; initialized: boolean; error: string | null } = {
+        attempted: false,
+        initialized: alexaAdapter.isInitialized(),
+        error: null,
+      };
+
+      if (config.alexaInvokeMode === "alexa_remote2") {
+        initState = {
+          attempted: true,
+          initialized: false,
+          error: null,
+        };
+        try {
+          await ensureAlexaAdapterInitialized(safeActor(req), "setup.alexa_cookie.update");
+          initState.initialized = true;
+        } catch (error) {
+          initState.error = error instanceof Error ? error.message : String(error);
+        }
+      }
+
       store.addAudit(safeActor(req), "setup.alexa_cookie.update", null, "success", {
         mode: result.mode,
         path: result.path,
+        initState,
       });
       res.json({
         ok: true,
         result,
-        message: "Alexa cookie stored. Restart the service to apply it.",
+        initState,
+        message: initState.error
+          ? "Alexa cookie stored, but Alexa init failed. Check initState.error."
+          : "Alexa cookie stored.",
       });
     } catch (error) {
       store.addAudit(safeActor(req), "setup.alexa_cookie.update", null, "failure", {
@@ -577,6 +623,7 @@ export async function createApp(): Promise<AppBundle> {
     try {
       const body = importAlexaTargetsSchema.parse(req.body ?? {});
       const importEnabled = body.enabled ?? true;
+      await ensureAlexaAdapterInitialized(safeActor(req), "targets.import_alexa_devices");
 
       const discoveredDevices = await alexaAdapter.listDevices();
       const existingTargets = store.listTargets();
