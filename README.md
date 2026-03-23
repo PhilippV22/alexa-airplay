@@ -47,6 +47,14 @@ npm run build
 
 ## Systeminstallation (Debian/Ubuntu)
 
+**One-liner (empfohlen):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PhilippV22/alexa-airplay/main/scripts/install-debian.sh | sudo bash
+```
+
+Oder mit lokalem Repo-Clone:
+
 ```bash
 sudo ./scripts/install-debian.sh
 ```
