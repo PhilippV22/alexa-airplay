@@ -231,6 +231,7 @@ export function mainPageHtml(adminUser: string): string {
   <main>
     <section style="grid-column: 1 / -1;">
       <h2>System Setup</h2>
+      <div id="setup-checklist" style="margin-bottom: 8px;"></div>
       <div class="status-grid" id="setup-status"></div>
       <div class="row" style="margin-bottom: 8px;">
         <button class="secondary" id="refresh-setup">Setup Status aktualisieren</button>
@@ -502,6 +503,14 @@ export function mainPageHtml(adminUser: string): string {
         document.getElementById('alexa-wizard-proxy-host').value = window.location.hostname;
       }
 
+      try {
+        var healthRes = await fetch('/health/setup');
+        if (healthRes.ok) {
+          var healthBody = await healthRes.json();
+          renderHealthSetup(healthBody);
+        }
+      } catch (_e) { /* ignore */ }
+
       await refreshAlexaWizardStatus();
       setMessage('setup-message', 'Setup geladen.', false, true);
     }
@@ -511,25 +520,61 @@ export function mainPageHtml(adminUser: string): string {
       el.innerHTML = '';
 
       var items = [
-        ['ENV File', status.envFileExists ? 'vorhanden' : 'fehlt'],
-        ['ENV write', status.envWritable ? 'ok' : 'kein Zugriff'],
-        ['Cloudflared File', status.cloudflaredConfigExists ? 'vorhanden' : 'fehlt'],
-        ['Cloudflared write', status.cloudflaredWritable ? 'ok' : 'kein Zugriff'],
-        ['Cookie encrypted', status.encryptedCookieExists ? 'vorhanden' : 'fehlt'],
-        ['Cookie plain', status.plainCookieExists ? 'vorhanden' : 'fehlt'],
-        ['Admin Hash', status.hasAdminPasswordHash ? 'gesetzt' : 'fehlt'],
-        ['Session Secret', status.hasSessionSecret ? 'gesetzt' : 'fehlt'],
-        ['AirBridge Service', status.services.airbridge.active + ' / ' + status.services.airbridge.enabled],
-        ['Cloudflared Service', status.services.cloudflared.active + ' / ' + status.services.cloudflared.enabled],
-        ['Encrypt erlaubt', status.allowCredentialEncryption ? 'ja' : 'nein']
+        ['ENV File', status.envFileExists, status.envFileExists ? 'vorhanden' : 'fehlt'],
+        ['ENV write', status.envWritable, status.envWritable ? 'ok' : 'kein Zugriff'],
+        ['Cookie plain', status.plainCookieExists, status.plainCookieExists ? 'vorhanden' : 'fehlt'],
+        ['Admin Hash', status.hasAdminPasswordHash, status.hasAdminPasswordHash ? 'gesetzt' : 'fehlt'],
+        ['Session Secret', status.hasSessionSecret, status.hasSessionSecret ? 'gesetzt' : 'fehlt'],
+        ['AirBridge Service', status.services.airbridge.active === 'active', status.services.airbridge.active + ' / ' + status.services.airbridge.enabled],
+        ['Cloudflared Service', status.services.cloudflared.active === 'active', status.services.cloudflared.active + ' / ' + status.services.cloudflared.enabled]
       ];
 
       for (var i = 0; i < items.length; i += 1) {
         var card = document.createElement('div');
+        var isOk = items[i][1];
         card.className = 'status-item';
-        card.innerHTML = '<b>' + escapeHtml(items[i][0]) + '</b>' + escapeHtml(items[i][1]);
+        card.style.borderColor = isOk ? '#166534' : '#7f1d1d';
+        card.style.background = isOk ? 'rgba(5,46,22,0.35)' : 'rgba(69,10,10,0.35)';
+        var icon = isOk ? '✅' : '❌';
+        card.innerHTML = '<b>' + escapeHtml(String(items[i][0])) + '</b>' + icon + ' ' + escapeHtml(String(items[i][2]));
         el.appendChild(card);
       }
+    }
+
+    function renderHealthSetup(health) {
+      var checklist = document.getElementById('setup-checklist');
+      if (!checklist) return;
+
+      var checks = [
+        { label: 'Stream-URL', ok: health.streamUrl.ok, hint: health.streamUrl.ok ? health.streamUrl.value : 'Platzhalter – Stream-URL in Basis Konfiguration setzen' },
+        { label: 'Alexa Cookie', ok: health.alexaCookie.ok, hint: health.alexaCookie.ok ? 'konfiguriert' : (health.alexaCookie.reason || 'fehlt') },
+        { label: 'shairport-sync', ok: health.shairportBin.ok, hint: health.shairportBin.ok ? health.shairportBin.path : 'nicht gefunden: ' + health.shairportBin.path },
+        { label: 'ffmpeg', ok: health.ffmpegBin.ok, hint: health.ffmpegBin.ok ? health.ffmpegBin.path : 'nicht gefunden: ' + health.ffmpegBin.path }
+      ];
+
+      var allOk = checks.every(function (c) { return c.ok; });
+      var html = '';
+
+      if (!allOk) {
+        html += '<div style="background:rgba(120,50,0,0.35);border:1px solid #92400e;border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:0.85rem;color:#fde68a;">';
+        html += '<b>Setup unvollstaendig</b> – folgende Punkte beachten:';
+        html += '</div>';
+      }
+
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">';
+      for (var i = 0; i < checks.length; i += 1) {
+        var c = checks[i];
+        var bg = c.ok ? 'rgba(5,46,22,0.35)' : 'rgba(69,10,10,0.35)';
+        var border = c.ok ? '#166534' : '#7f1d1d';
+        var icon = c.ok ? '✅' : '❌';
+        html += '<div style="padding:7px 10px;border-radius:8px;border:1px solid ' + border + ';background:' + bg + ';font-size:0.8rem;">';
+        html += '<b style="display:block;margin-bottom:2px;">' + icon + ' ' + escapeHtml(c.label) + '</b>';
+        html += '<span style="color:#9fb4cc;">' + escapeHtml(c.hint) + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+
+      checklist.innerHTML = html;
     }
 
     function fillSetupConfig(values) {

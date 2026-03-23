@@ -894,6 +894,41 @@ export async function createApp(): Promise<AppBundle> {
     });
   });
 
+  app.get("/health/setup", (_req, res) => {
+    const cookieOk = (() => {
+      if (config.alexaInvokeMode !== "alexa_remote2") {
+        return { ok: true, reason: "mock mode" };
+      }
+      if (!config.alexaCookiePath) {
+        return { ok: false, reason: "not configured" };
+      }
+      try {
+        const stat = fs.statSync(config.alexaCookiePath);
+        return stat.size > 0
+          ? { ok: true }
+          : { ok: false, reason: "Datei leer – Cookie Wizard starten" };
+      } catch {
+        return { ok: false, reason: "Datei fehlt" };
+      }
+    })();
+
+    const checkBin = (bin: string): boolean => {
+      if (path.isAbsolute(bin)) return fs.existsSync(bin);
+      return true;
+    };
+
+    res.json({
+      streamUrl: {
+        ok: !config.streamBaseUrl.includes("example.com"),
+        value: config.streamBaseUrl,
+      },
+      alexaCookie: cookieOk,
+      shairportBin: { ok: checkBin(config.shairportBin), path: config.shairportBin },
+      ffmpegBin: { ok: checkBin(config.ffmpegBin), path: config.ffmpegBin },
+      alexaMode: config.alexaInvokeMode,
+    });
+  });
+
   app.get("/metrics", async (_req, res, next) => {
     try {
       res.set("Content-Type", metrics.registry.contentType);

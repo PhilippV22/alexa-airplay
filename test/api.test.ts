@@ -329,4 +329,18 @@ describe("airbridge api", () => {
     const cookieFile = fs.readFileSync(process.env.AIRBRIDGE_SETUP_ALEXA_COOKIE_FILE as string, "utf8");
     expect(cookieFile).toContain("mock-cookie");
   });
+
+  it("GET /health/setup returns setup status without auth", async () => {
+    const res = await request(bundle.app).get("/health/setup");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("streamUrl");
+    expect(res.body).toHaveProperty("alexaCookie");
+    expect(res.body).toHaveProperty("shairportBin");
+    expect(res.body).toHaveProperty("ffmpegBin");
+    expect(res.body).toHaveProperty("alexaMode");
+    // In test env, stream URL is stream.example.com which contains "example.com"
+    expect(res.body.streamUrl.ok).toBe(false);
+    // In mock mode cookie is always ok
+    expect(res.body.alexaCookie.ok).toBe(true);
+  });
 });

@@ -65,6 +65,17 @@ if [[ -f /etc/os-release ]]; then
   fi
 fi
 
+# Interaktiv: Stream-URL und Skill-URL abfragen (vor apt, damit User nicht wartet)
+STREAM_URL_INPUT=""
+SKILL_URL_INPUT=""
+if [[ -t 0 ]]; then
+  echo ""
+  echo "=== AirBridge Setup ==="
+  read -r -p "Cloudflared Stream-URL fuer HLS (z.B. https://stream.deinedomain.com) [leer = spaeter in Web-UI setzen]: " STREAM_URL_INPUT
+  read -r -p "Cloudflared Skill-URL fuer Alexa (z.B. https://skill.deinedomain.com) [leer = spaeter]: " SKILL_URL_INPUT
+  echo ""
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
@@ -137,13 +148,15 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   SESSION_SECRET="$(openssl rand -hex 32)"
   ADMIN_PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
 
+  STREAM_URL="${STREAM_URL_INPUT:-https://stream.airbridge.example.com}"
+
   cat > "${ENV_FILE}" <<ENV
 # Managed by AirBridge installer and Web UI
 AIRBRIDGE_BIND_HOST=0.0.0.0
 AIRBRIDGE_PORT=3000
 AIRBRIDGE_TRUST_PROXY=false
 AIRBRIDGE_SESSION_SECRET=${SESSION_SECRET}
-AIRBRIDGE_STREAM_BASE_URL=https://stream.airbridge.example.com
+AIRBRIDGE_STREAM_BASE_URL=${STREAM_URL}
 AIRBRIDGE_ADMIN_USER=admin
 AIRBRIDGE_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 AIRBRIDGE_SESSION_TTL_SECONDS=28800
@@ -180,8 +193,8 @@ AIRBRIDGE_ALEXA_COOKIE_WIZARD_TIMEOUT_SECONDS=600
 AIRBRIDGE_ALEXA_COOKIE_WIZARD_MOCK=false
 ENV
 
-  echo "Generated initial admin password: ${ADMIN_PASSWORD}"
 else
+  ADMIN_PASSWORD="(bereits gesetzt – in ${ENV_FILE} nachschlagen oder Passwort in Web-UI aendern)"
   echo "Keeping existing ${ENV_FILE}"
 fi
 
@@ -204,18 +217,48 @@ systemctl daemon-reload
 systemctl enable --now airbridge.service
 systemctl enable --now airbridge-watchdog.timer
 
+HOST_IP="$(hostname -I | awk '{print $1}')"
+
 echo ""
-echo "Installation complete."
-echo "Web UI: http://<host>:3000"
-echo "Env file: ${ENV_FILE}"
-echo "Cloudflared config: ${CLOUDFLARED_FILE}"
-echo "Alexa cookie file: ${PLAIN_COOKIE_FILE}"
+echo "============================================================"
+echo "  AirBridge Installation abgeschlossen!"
+echo "============================================================"
 echo ""
-echo "Next steps:"
-echo "1) In Web UI unter 'System Setup' Stream URL, Cookie und Cloudflared eintragen"
-if [[ "${CLOUDFLARED_INSTALLED}" == "true" ]]; then
-  echo "2) Optional: Cloudflared starten: systemctl enable --now cloudflared-airbridge.service"
+echo "  Web UI:         http://${HOST_IP}:3000"
+echo "  Admin User:     admin"
+echo "  Admin Passwort: ${ADMIN_PASSWORD}"
+echo ""
+echo "  Env-Datei:      ${ENV_FILE}"
+echo "  Cookie-Datei:   ${PLAIN_COOKIE_FILE}"
+echo ""
+echo "Naechste Schritte:"
+echo ""
+echo "  1) Browser oeffnen: http://${HOST_IP}:3000"
+echo "     Login mit: admin / ${ADMIN_PASSWORD}"
+echo ""
+echo "  2) System Setup -> Stream-URL pruefen/setzen:"
+if [[ -n "${STREAM_URL_INPUT}" ]]; then
+  echo "     (bereits gesetzt: ${STREAM_URL_INPUT})"
 else
-  echo "2) Optional: cloudflared spaeter installieren und dann cloudflared-airbridge.service starten"
+  echo "     Cloudflared-Tunnel-URL eintragen (z.B. https://stream.deinedomain.com)"
 fi
-echo "3) Nach Setup in Web UI 'Aenderungen anwenden (AirBridge Neustart)' klicken"
+echo ""
+echo "  3) System Setup -> Alexa Cookie Wizard starten"
+echo "     Amazon-Login im Browser abschliessen"
+echo ""
+echo "  4) 'Aenderungen anwenden (AirBridge Neustart)' klicken"
+echo ""
+echo "  5) Targets -> 'Alexa Geraete importieren'"
+echo "     Beide Echo-Geraete als Targets aktivieren"
+echo ""
+if [[ "${CLOUDFLARED_INSTALLED}" == "true" ]]; then
+  echo "  Optional Cloudflared starten:"
+  echo "    systemctl enable --now cloudflared-airbridge.service"
+  echo ""
+  if [[ -n "${SKILL_URL_INPUT}" ]]; then
+    echo "  Alexa Skill Endpoint: ${SKILL_URL_INPUT}/alexa/skill"
+    echo ""
+  fi
+fi
+echo "  Logs verfolgen: journalctl -fu airbridge.service"
+echo "============================================================"
