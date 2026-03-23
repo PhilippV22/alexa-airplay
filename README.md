@@ -50,7 +50,7 @@ npm run build
 **One-liner (empfohlen):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PhilippV22/alexa-airplay/main/scripts/install-debian.sh | sudo bash
+apt-get install -y git && git clone --depth=1 https://github.com/PhilippV22/alexa-airplay.git /tmp/airbridge && sudo bash /tmp/airbridge/scripts/install-debian.sh
 ```
 
 Oder mit lokalem Repo-Clone:
