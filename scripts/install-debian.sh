@@ -6,15 +6,20 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-/dev/stdin}")" 2>/dev/null && pwd)" || SCRIPT_DIR=""
+set +u
+_SELF="${BASH_SOURCE[0]:-}"
+set -u
 
 REPO_DIR=""
 if [[ $# -ge 1 ]]; then
   REPO_DIR="${1}"
 elif [[ -f "$(pwd)/package.json" ]]; then
   REPO_DIR="$(pwd)"
-elif [[ -n "${SCRIPT_DIR}" && -f "${SCRIPT_DIR}/../package.json" ]]; then
-  REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+elif [[ -n "${_SELF}" ]]; then
+  _SCRIPT_DIR="$(cd -- "$(dirname -- "${_SELF}")" && pwd)"
+  if [[ -f "${_SCRIPT_DIR}/../package.json" ]]; then
+    REPO_DIR="$(cd "${_SCRIPT_DIR}/.." && pwd)"
+  fi
 fi
 
 # Pipe-Modus (curl | bash): kein Repo gefunden -> automatisch clonen
