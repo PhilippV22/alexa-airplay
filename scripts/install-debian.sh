@@ -6,16 +6,26 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-/dev/stdin}")" 2>/dev/null && pwd)" || SCRIPT_DIR=""
 
+REPO_DIR=""
 if [[ $# -ge 1 ]]; then
   REPO_DIR="${1}"
 elif [[ -f "$(pwd)/package.json" ]]; then
   REPO_DIR="$(pwd)"
-elif [[ -f "${SCRIPT_DIR}/../package.json" ]]; then
+elif [[ -n "${SCRIPT_DIR}" && -f "${SCRIPT_DIR}/../package.json" ]]; then
   REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-else
-  REPO_DIR="$(pwd)"
+fi
+
+# Pipe-Modus (curl | bash): kein Repo gefunden -> automatisch clonen
+if [[ -z "${REPO_DIR}" || ! -f "${REPO_DIR}/package.json" ]]; then
+  echo "Kein lokales Repo gefunden – klone von GitHub..."
+  apt-get update -qq
+  apt-get install -y -qq git ca-certificates
+  CLONE_DIR="$(mktemp -d)"
+  git clone --depth=1 https://github.com/PhilippV22/alexa-airplay.git "${CLONE_DIR}"
+  REPO_DIR="${CLONE_DIR}"
+  echo "Repo geklont nach: ${REPO_DIR}"
 fi
 APP_USER="airbridge"
 APP_GROUP="airbridge"
