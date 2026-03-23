@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ChildProcess, execFileSync, spawn } from "node:child_process";
+import { ChildProcess, execFileSync, spawnSync, spawn } from "node:child_process";
 import { logger } from "../logger";
 import { ErrorCode, ManagedProcessInfo, Target } from "../types";
 
@@ -98,6 +98,14 @@ export class ProcessManager {
   }
 
   private startTarget(target: Target): void {
+    if (target.type === "bluetooth" && target.bluetooth_mac) {
+      this.startBluetoothTarget(target);
+      return;
+    }
+    this.startHlsTarget(target);
+  }
+
+  private startHlsTarget(target: Target): void {
     const hlsDir = path.join(this.options.hlsRoot, String(target.id));
     const fifoPath = path.join(this.options.fifoRoot, `${target.id}.pcm`);
     const playlistPath = path.join(hlsDir, "index.m3u8");
@@ -242,6 +250,138 @@ export class ProcessManager {
       if (runtime.ffmpeg?.pid) {
         runtime.ffmpeg.kill("SIGTERM");
       }
+      runtime.state = "error";
+    }
+  }
+
+  private startBluetoothTarget(target: Target): void {
+    const fifoPath = path.join(this.options.fifoRoot, `${target.id}.pcm`);
+    const mac = target.bluetooth_mac!;
+
+    fs.mkdirSync(this.options.shairportConfigRoot, { recursive: true });
+
+    if (!fs.existsSync(fifoPath)) {
+      try {
+        execFileSync("mkfifo", [fifoPath]);
+      } catch (error) {
+        logger.error("mkfifo failed (bt)", {
+          targetId: target.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.options.onTargetError(target, "BT_CONNECT_FAILED", "mkfifo failed");
+        return;
+      }
+    }
+
+    const runtime: RuntimeProcess = {
+      target,
+      shairport: null,
+      ffmpeg: null,
+      monitorTimer: null,
+      playlistPath: "",
+      hlsDir: "",
+      fifoPath,
+      hadAudio: false,
+      lastPlaylistMtimeMs: 0,
+      lastAudioAt: 0,
+      state: "starting",
+    };
+
+    if (!this.options.spawnProcesses) {
+      runtime.state = "running";
+      this.processes.set(target.id, runtime);
+      return;
+    }
+
+    // Connect Bluetooth device
+    logger.info("connecting bluetooth device", { targetId: target.id, mac });
+    const btResult = spawnSync("bluetoothctl", ["connect", mac], { timeout: 15000, encoding: "utf8" });
+    if (btResult.status !== 0) {
+      const details = (btResult.stderr || btResult.stdout || "").toString().slice(0, 200);
+      logger.error("bluetooth connect failed", { targetId: target.id, mac, details });
+      this.options.onTargetError(target, "BT_CONNECT_FAILED", `bluetoothctl connect failed: ${details}`);
+      return;
+    }
+    logger.info("bluetooth device connected", { targetId: target.id, mac });
+
+    try {
+      const shairportPorts = this.getShairportPorts(target.id);
+      const shairportConfigPath = this.writeShairportConfig(target, fifoPath, shairportPorts);
+      const shairport = spawn(this.options.shairportBin, ["-c", shairportConfigPath], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      const shairportErrLines: string[] = [];
+      const ffmpegErrLines: string[] = [];
+
+      shairport.stderr.on("data", (chunk) => {
+        this.pushRecentLogLines(shairportErrLines, chunk.toString());
+      });
+      shairport.on("exit", (code) => {
+        if (runtime.state === "stopped") return;
+        runtime.state = "error";
+        logger.error("shairport exited (bt)", { targetId: target.id, code });
+        this.options.onTargetError(target, "BT_CONNECT_FAILED",
+          this.formatProcessExitDetails("shairport", code, shairportErrLines));
+      });
+
+      const ffmpeg = spawn(
+        this.options.ffmpegBin,
+        [
+          "-hide_banner", "-nostdin",
+          "-f", "s16le", "-ar", "44100", "-ac", "2",
+          "-i", fifoPath,
+          "-f", "alsa",
+          `bluealsa:DEV=${mac},PROFILE=a2dp`,
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+
+      ffmpeg.stderr.on("data", (chunk) => {
+        this.pushRecentLogLines(ffmpegErrLines, chunk.toString());
+      });
+      ffmpeg.on("exit", (code) => {
+        if (runtime.state === "stopped") return;
+        runtime.state = "error";
+        logger.error("ffmpeg exited (bt)", { targetId: target.id, code });
+        this.options.onTargetError(target, "BT_CONNECT_FAILED",
+          this.formatProcessExitDetails("ffmpeg", code, ffmpegErrLines));
+      });
+
+      runtime.shairport = shairport;
+      runtime.ffmpeg = ffmpeg;
+      runtime.state = "running";
+
+      // Detect audio: after 3s both processes alive → audio started
+      const startTimer = setTimeout(() => {
+        if (runtime.state === "running" && !runtime.hadAudio) {
+          runtime.hadAudio = true;
+          runtime.lastAudioAt = Date.now();
+          this.options.onAudioStart(runtime.target);
+        }
+      }, 3000);
+      startTimer.unref();
+
+      // Watchdog: if ffmpeg dies and we had audio → audio stopped
+      ffmpeg.on("exit", () => {
+        if (runtime.hadAudio) {
+          runtime.hadAudio = false;
+          this.options.onAudioStop(runtime.target);
+        }
+      });
+
+      this.processes.set(target.id, runtime);
+      logger.info("bluetooth target started", {
+        targetId: target.id,
+        mac,
+        shairportPid: shairport.pid,
+        ffmpegPid: ffmpeg.pid,
+      });
+    } catch (error) {
+      logger.error("failed to start bluetooth target", {
+        targetId: target.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.options.onTargetError(target, "BT_CONNECT_FAILED", "startBluetoothTarget failed");
       runtime.state = "error";
     }
   }

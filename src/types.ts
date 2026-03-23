@@ -1,4 +1,4 @@
-export type TargetType = "device" | "group";
+export type TargetType = "device" | "group" | "bluetooth";
 
 export type TargetStatus =
   | "active"
@@ -13,7 +13,8 @@ export type ErrorCode =
   | "ALEXA_AUTH_FAILED"
   | "ALEXA_INVOKE_FAILED"
   | "TUNNEL_UNAVAILABLE"
-  | "TRANSCODER_FAILED";
+  | "TRANSCODER_FAILED"
+  | "BT_CONNECT_FAILED";
 
 export interface Target {
   id: number;
@@ -21,6 +22,7 @@ export interface Target {
   type: TargetType;
   alexa_device_id: string | null;
   alexa_group_id: string | null;
+  bluetooth_mac: string | null;
   airplay_name: string;
   enabled: number;
   status: TargetStatus;
@@ -54,6 +56,7 @@ export interface CreateTargetInput {
   type: TargetType;
   alexa_device_id?: string;
   alexa_group_id?: string;
+  bluetooth_mac?: string;
   airplay_name?: string;
   enabled?: boolean;
 }
@@ -62,6 +65,7 @@ export interface UpdateTargetInput {
   name?: string;
   alexa_device_id?: string | null;
   alexa_group_id?: string | null;
+  bluetooth_mac?: string | null;
   airplay_name?: string;
   enabled?: boolean;
   status?: TargetStatus;

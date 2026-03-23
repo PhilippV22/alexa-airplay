@@ -31,9 +31,10 @@ export class Store {
       CREATE TABLE IF NOT EXISTS targets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('device', 'group')),
+        type TEXT NOT NULL CHECK(type IN ('device', 'group', 'bluetooth')),
         alexa_device_id TEXT,
         alexa_group_id TEXT,
+        bluetooth_mac TEXT,
         airplay_name TEXT NOT NULL UNIQUE,
         enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
         status TEXT NOT NULL CHECK(status IN ('active', 'blocked_group_native_unsupported', 'error', 'disabled')),
@@ -70,6 +71,14 @@ export class Store {
       CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(ended_at);
       CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
     `);
+
+    // Migrations for existing databases
+    const cols = (this.db.prepare("PRAGMA table_info(targets)").all() as { name: string }[]).map(
+      (c) => c.name,
+    );
+    if (!cols.includes("bluetooth_mac")) {
+      this.db.exec("ALTER TABLE targets ADD COLUMN bluetooth_mac TEXT");
+    }
   }
 
   listTargets(): Target[] {
@@ -85,7 +94,7 @@ export class Store {
   listEnabledDeviceTargets(): Target[] {
     const stmt = this.db.prepare(
       `SELECT * FROM targets
-       WHERE type = 'device' AND enabled = 1 AND status = 'active'
+       WHERE type IN ('device', 'bluetooth') AND enabled = 1 AND status = 'active'
        ORDER BY id ASC`,
     );
     return stmt.all() as Target[];
@@ -103,9 +112,9 @@ export class Store {
 
     const insertStmt = this.db.prepare(`
       INSERT INTO targets (
-        name, type, alexa_device_id, alexa_group_id, airplay_name,
+        name, type, alexa_device_id, alexa_group_id, bluetooth_mac, airplay_name,
         enabled, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = insertStmt.run(
@@ -113,6 +122,7 @@ export class Store {
       input.type,
       input.alexa_device_id ?? null,
       input.alexa_group_id ?? null,
+      input.bluetooth_mac ?? null,
       input.airplay_name ?? `AirBridge ${input.name}`,
       enabled ? 1 : 0,
       status,
@@ -149,6 +159,11 @@ export class Store {
     if (patch.alexa_group_id !== undefined) {
       updates.push("alexa_group_id = ?");
       values.push(patch.alexa_group_id);
+    }
+
+    if (patch.bluetooth_mac !== undefined) {
+      updates.push("bluetooth_mac = ?");
+      values.push(patch.bluetooth_mac);
     }
 
     if (patch.airplay_name !== undefined) {

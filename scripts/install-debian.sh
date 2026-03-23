@@ -95,7 +95,8 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   ca-certificates curl gnupg rsync openssl sudo \
-  sqlite3 ffmpeg shairport-sync
+  sqlite3 ffmpeg shairport-sync \
+  bluez bluez-alsa-utils
 
 CLOUDFLARED_INSTALLED="false"
 if apt-cache show cloudflared >/dev/null 2>&1; then
@@ -125,6 +126,12 @@ fi
 if ! id -u "${APP_USER}" >/dev/null 2>&1; then
   useradd --system --gid "${APP_GROUP}" --home "${APP_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
 fi
+
+# Bluetooth: airbridge user muss in bluetooth-Gruppe sein
+usermod -aG bluetooth "${APP_USER}" 2>/dev/null || true
+
+# BlueALSA daemon aktivieren (stellt ALSA BT-Devices bereit)
+systemctl enable --now bluealsa.service 2>/dev/null || true
 
 install -d -o "${APP_USER}" -g "${APP_GROUP}" "${APP_DIR}"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" "${DATA_DIR}" "${DATA_DIR}/hls" "${DATA_DIR}/db"
@@ -263,8 +270,9 @@ echo "     Amazon-Login im Browser abschliessen"
 echo ""
 echo "  4) 'Aenderungen anwenden (AirBridge Neustart)' klicken"
 echo ""
-echo "  5) Targets -> 'Alexa Geraete importieren'"
-echo "     Beide Echo-Geraete als Targets aktivieren"
+echo "  5) Bluetooth Setup -> 'Bluetooth scannen'"
+echo "     Beide Echos in Alexa-App in Pairing-Modus setzen,"
+echo "     dann in Web-UI scannen und 'Koppeln & Target erstellen' klicken"
 echo ""
 if [[ "${CLOUDFLARED_INSTALLED}" == "true" ]]; then
   echo "  Optional Cloudflared starten:"

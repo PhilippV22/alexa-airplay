@@ -388,6 +388,19 @@ export function mainPageHtml(adminUser: string): string {
     </section>
 
     <section style="grid-column: 1 / -1;">
+      <h2>Bluetooth Setup</h2>
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 8px;">
+        Alexa in Pairing-Modus setzen (Alexa-App → Geraet → Bluetooth → Neues Geraet koppeln), dann "Scannen".
+      </p>
+      <div class="row" style="margin-bottom:8px;">
+        <button class="success" id="bt-scan">Bluetooth scannen (~8s)</button>
+        <button class="secondary" id="bt-list">Bekannte Geraete</button>
+      </div>
+      <div id="bt-devices" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;"></div>
+      <p class="msg" id="bt-message"></p>
+    </section>
+
+    <section style="grid-column: 1 / -1;">
       <h2>Targets</h2>
       <div class="row" style="margin-bottom: 8px;">
         <button class="success" id="import-alexa-devices">Alexa Devices importieren</button>
@@ -1132,6 +1145,70 @@ export function mainPageHtml(adminUser: string): string {
     document.getElementById('logout').onclick = async function () {
       await api('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
       window.location.href = '/login';
+    };
+
+    function renderBtDevices(devices, isKnown) {
+      var el = document.getElementById('bt-devices');
+      el.innerHTML = '';
+      if (!devices.length) {
+        el.innerHTML = '<span style="color:var(--muted);font-size:0.83rem;">Keine Geraete gefunden.</span>';
+        return;
+      }
+      for (var i = 0; i < devices.length; i += 1) {
+        var d = devices[i];
+        var card = document.createElement('div');
+        card.style.cssText = 'padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card-2);font-size:0.82rem;display:flex;align-items:center;gap:10px;';
+        var label = document.createElement('span');
+        label.textContent = escapeHtml(d.name) + '  (' + escapeHtml(d.mac) + ')';
+        var pairBtn = document.createElement('button');
+        pairBtn.textContent = 'Koppeln & Target erstellen';
+        pairBtn.className = 'success';
+        pairBtn.style.padding = '4px 8px';
+        pairBtn.style.fontSize = '0.78rem';
+        (function (mac, name) {
+          pairBtn.onclick = function () {
+            setMessage('bt-message', 'Koppele ' + mac + ' ...');
+            api('/api/bt/pair', { method: 'POST', body: JSON.stringify({ mac: mac }) })
+              .then(function (r) { return r.json(); })
+              .then(function (body) {
+                if (body.error) { setMessage('bt-message', body.message || 'Fehler', true, false); return; }
+                return api('/api/targets', {
+                  method: 'POST',
+                  body: JSON.stringify({ name: name, type: 'bluetooth', bluetooth_mac: mac, airplay_name: 'AirBridge ' + name, enabled: true })
+                });
+              })
+              .then(function (r) {
+                if (!r) return;
+                if (!r.ok) { return r.json().then(function (b) { setMessage('bt-message', b.message || 'Target-Fehler', true, false); }); }
+                setMessage('bt-message', 'Gekoppelt und Target erstellt: ' + name, false, true);
+                refreshRuntimeTables();
+              })
+              .catch(function (e) { setMessage('bt-message', e.message || 'Fehler', true, false); });
+          };
+        })(d.mac, d.name);
+        card.appendChild(label);
+        card.appendChild(pairBtn);
+        el.appendChild(card);
+      }
+    }
+
+    document.getElementById('bt-scan').onclick = function () {
+      setMessage('bt-message', 'Scanne... (ca. 8 Sekunden)');
+      document.getElementById('bt-devices').innerHTML = '';
+      api('/api/bt/scan', { method: 'POST', body: '{}' })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          renderBtDevices(b.devices || [], false);
+          setMessage('bt-message', (b.devices || []).length + ' Geraet(e) gefunden.', false, true);
+        })
+        .catch(function (e) { setMessage('bt-message', e.message || 'Scan fehlgeschlagen', true, false); });
+    };
+
+    document.getElementById('bt-list').onclick = function () {
+      api('/api/bt/devices')
+        .then(function (r) { return r.json(); })
+        .then(function (b) { renderBtDevices(b.devices || [], true); setMessage('bt-message', '', false, false); })
+        .catch(function (e) { setMessage('bt-message', e.message || 'Fehler', true, false); });
     };
 
     Promise.all([loadSetup(), refreshRuntimeTables()]).catch(function (error) {

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execFile, spawnSync } from "node:child_process";
 import express, { Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -29,9 +30,10 @@ const loginSchema = z.object({
 
 const createTargetSchema = z.object({
   name: z.string().min(1),
-  type: z.enum(["device", "group"]),
+  type: z.enum(["device", "group", "bluetooth"]),
   alexa_device_id: z.string().optional(),
   alexa_group_id: z.string().optional(),
+  bluetooth_mac: z.string().regex(/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/).optional(),
   airplay_name: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
 });
@@ -40,6 +42,7 @@ const updateTargetSchema = z.object({
   name: z.string().min(1).optional(),
   alexa_device_id: z.string().nullable().optional(),
   alexa_group_id: z.string().nullable().optional(),
+  bluetooth_mac: z.string().regex(/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/).nullable().optional(),
   airplay_name: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
   status: z.enum(["active", "blocked_group_native_unsupported", "error", "disabled"]).optional(),
@@ -926,6 +929,67 @@ export async function createApp(): Promise<AppBundle> {
       shairportBin: { ok: checkBin(config.shairportBin), path: config.shairportBin },
       ffmpegBin: { ok: checkBin(config.ffmpegBin), path: config.ffmpegBin },
       alexaMode: config.alexaInvokeMode,
+    });
+  });
+
+  // Bluetooth API (requires auth via api router, listed here as standalone for clarity)
+  api.get("/bt/devices", (_req, res) => {
+    try {
+      const result = spawnSync("bluetoothctl", ["devices"], { encoding: "utf8", timeout: 5000 });
+      const lines = (result.stdout || "").split("\n").filter((l) => l.startsWith("Device "));
+      const devices = lines.map((line) => {
+        const parts = line.split(" ");
+        return { mac: parts[1], name: parts.slice(2).join(" ") || parts[1] };
+      });
+      res.json({ devices });
+    } catch {
+      res.json({ devices: [] });
+    }
+  });
+
+  api.post("/bt/scan", (_req, res) => {
+    // Power on adapter, scan 8s, return discovered devices
+    spawnSync("bluetoothctl", ["power", "on"], { timeout: 5000 });
+    spawnSync("bluetoothctl", ["--timeout", "8", "scan", "on"], { timeout: 12000 });
+    try {
+      const result = spawnSync("bluetoothctl", ["devices"], { encoding: "utf8", timeout: 5000 });
+      const lines = (result.stdout || "").split("\n").filter((l) => l.startsWith("Device "));
+      const devices = lines.map((line) => {
+        const parts = line.split(" ");
+        return { mac: parts[1], name: parts.slice(2).join(" ") || parts[1] };
+      });
+      res.json({ devices });
+    } catch {
+      res.json({ devices: [] });
+    }
+  });
+
+  api.post("/bt/pair", (req, res) => {
+    const { mac } = z.object({ mac: z.string().regex(/^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/) }).parse(req.body);
+    execFile("bluetoothctl", ["pair", mac], { timeout: 30000 }, (err1) => {
+      execFile("bluetoothctl", ["trust", mac], { timeout: 5000 }, (err2) => {
+        if (err1 && !err2) {
+          // pair might fail if already paired – trust success is enough
+        }
+        if (err1 && err2) {
+          res.status(500).json({ error: "BT_PAIR_FAILED", message: err1.message });
+          return;
+        }
+        store.addAudit(safeActor(req), "bt.pair", null, "success", { mac });
+        res.json({ ok: true, mac });
+      });
+    });
+  });
+
+  api.delete("/bt/unpair/:mac", (req, res) => {
+    const mac = req.params.mac;
+    execFile("bluetoothctl", ["remove", mac], { timeout: 5000 }, (err) => {
+      if (err) {
+        res.status(500).json({ error: "BT_REMOVE_FAILED", message: err.message });
+        return;
+      }
+      store.addAudit(safeActor(req), "bt.unpair", null, "success", { mac });
+      res.json({ ok: true });
     });
   });
 
