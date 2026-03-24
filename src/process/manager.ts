@@ -223,63 +223,70 @@ export class ProcessManager {
         if (runtime.state === "stopped") return;
         if (runtime.ffmpeg?.pid) return;
 
-        const success = code === 0 || output.includes("Connection successful");
+        const alreadyConnected = output.includes("Already connected");
+        const success = code === 0 || output.includes("Connection successful") || alreadyConnected;
         if (!success) {
           logger.debug("BT not available yet, will retry", { targetId: target.id, mac, code });
           return;
         }
 
-      logger.info("BT connected, starting ffmpeg", { targetId: target.id, mac });
+        // Give BlueALSA time to register the A2DP profile after BT connect.
+        const a2dpDelay = alreadyConnected ? 0 : 2000;
+        setTimeout(() => {
+          if (runtime.state === "stopped" || runtime.ffmpeg?.pid) return;
 
-      const ffmpegErrLines: string[] = [];
-      const ffmpeg = spawn(
-        this.options.ffmpegBin,
-        [
-          "-hide_banner", "-nostdin",
-          "-f", "s16le", "-ar", "44100", "-ac", "2",
-          "-i", fifoPath,
-          "-f", "alsa",
-          `bluealsa:DEV=${mac},PROFILE=a2dp`,
-        ],
-        { stdio: ["ignore", "pipe", "pipe"] },
-      );
+          logger.info("BT connected, starting ffmpeg", { targetId: target.id, mac });
 
-      ffmpeg.stderr.on("data", (chunk) => {
-        this.pushRecentLogLines(ffmpegErrLines, chunk.toString());
-      });
+          const ffmpegErrLines: string[] = [];
+          const ffmpeg = spawn(
+            this.options.ffmpegBin,
+            [
+              "-hide_banner", "-nostdin",
+              "-f", "s16le", "-ar", "44100", "-ac", "2",
+              "-i", fifoPath,
+              "-f", "alsa",
+              `bluealsa:DEV=${mac},PROFILE=a2dp`,
+            ],
+            { stdio: ["ignore", "pipe", "pipe"] },
+          );
 
-      ffmpeg.on("exit", (exitCode) => {
-        if (runtime.state === "stopped") return;
-        logger.warn("ffmpeg exited, waiting for BT reconnect", {
-          targetId: target.id,
-          code: exitCode,
-          details: ffmpegErrLines.slice(-2).join(" | "),
-        });
-        runtime.ffmpeg = null;
-        if (runtime.hadAudio) {
-          runtime.hadAudio = false;
-          this.options.onAudioStop(runtime.target);
-        }
-      });
+          ffmpeg.stderr.on("data", (chunk) => {
+            this.pushRecentLogLines(ffmpegErrLines, chunk.toString());
+          });
 
-      runtime.ffmpeg = ffmpeg;
+          ffmpeg.on("exit", (exitCode) => {
+            if (runtime.state === "stopped") return;
+            logger.warn("ffmpeg exited, waiting for BT reconnect", {
+              targetId: target.id,
+              code: exitCode,
+              details: ffmpegErrLines.slice(-2).join(" | "),
+            });
+            runtime.ffmpeg = null;
+            if (runtime.hadAudio) {
+              runtime.hadAudio = false;
+              this.options.onAudioStop(runtime.target);
+            }
+          });
 
-      // Detect audio start: after 3s with both processes alive
-      const startTimer = setTimeout(() => {
-        if (runtime.state === "running" && !runtime.hadAudio && runtime.ffmpeg?.pid) {
-          runtime.hadAudio = true;
-          runtime.lastAudioAt = Date.now();
-          this.options.onAudioStart(runtime.target);
-        }
-      }, 3000);
-      startTimer.unref();
+          runtime.ffmpeg = ffmpeg;
 
-      logger.info("bluetooth target fully started", {
-        targetId: target.id,
-        mac,
-        shairportPid: runtime.shairport?.pid,
-        ffmpegPid: ffmpeg.pid,
-      });
+          // Detect audio start: after 3s with both processes alive
+          const startTimer = setTimeout(() => {
+            if (runtime.state === "running" && !runtime.hadAudio && runtime.ffmpeg?.pid) {
+              runtime.hadAudio = true;
+              runtime.lastAudioAt = Date.now();
+              this.options.onAudioStart(runtime.target);
+            }
+          }, 3000);
+          startTimer.unref();
+
+          logger.info("bluetooth target fully started", {
+            targetId: target.id,
+            mac,
+            shairportPid: runtime.shairport?.pid,
+            ffmpegPid: ffmpeg.pid,
+          });
+        }, a2dpDelay);
       });
     });
   }
