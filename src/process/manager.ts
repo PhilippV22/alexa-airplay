@@ -223,10 +223,10 @@ export class ProcessManager {
         if (runtime.state === "stopped") return;
         if (runtime.ffmpeg?.pid) return;
 
-        const alreadyConnected = output.includes("Already connected");
+        const alreadyConnected = output.includes("AlreadyConnected") || output.includes("Already connected");
         const success = code === 0 || output.includes("Connection successful") || alreadyConnected;
         if (!success) {
-          logger.debug("BT not available yet, will retry", { targetId: target.id, mac, code });
+          logger.info("BT not available yet, will retry", { targetId: target.id, mac, code, output: output.slice(0, 120) });
           return;
         }
 
