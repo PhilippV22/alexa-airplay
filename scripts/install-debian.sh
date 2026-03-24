@@ -175,7 +175,9 @@ chown root:"${APP_GROUP}" "${ENV_FILE}" || true
 chmod 0660 "${ENV_FILE}" || true
 
 systemctl daemon-reload
-systemctl enable --now airbridge.service
+systemctl enable airbridge.service
+systemctl enable airbridge-watchdog.timer
+systemctl restart airbridge.service
 systemctl enable --now airbridge-watchdog.timer
 
 HOST_IP="$(hostname -I | awk '{print $1}')"
