@@ -1,24 +1,21 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ChildProcess, execFileSync, spawn } from "node:child_process";
+import { ChildProcess, spawn } from "node:child_process";
 import { logger } from "../logger";
 import { ErrorCode, ManagedProcessInfo, Target } from "../types";
 
 interface RuntimeProcess {
   target: Target;
   shairport: ChildProcess | null;
-  ffmpeg: ChildProcess | null;
   btRetryTimer: NodeJS.Timeout | null;
-  fifoPath: string;
-  hadAudio: boolean;
-  lastAudioAt: number;
+  btConnected: boolean;
   state: "starting" | "running" | "stopped" | "error";
 }
 
 interface ProcessManagerOptions {
   shairportBin: string;
-  ffmpegBin: string;
-  fifoRoot: string;
+  ffmpegBin: string;       // kept for config compat, unused
+  fifoRoot: string;        // kept for config compat, unused
   shairportConfigRoot: string;
   monitorIntervalMs: number;
   spawnProcesses: boolean;
@@ -69,7 +66,7 @@ export class ProcessManager {
     return Array.from(this.processes.values()).map((runtime) => ({
       targetId: runtime.target.id,
       shairportPid: runtime.shairport?.pid ?? null,
-      ffmpegPid: runtime.ffmpeg?.pid ?? null,
+      ffmpegPid: null,
       state: runtime.state,
     }));
   }
@@ -78,7 +75,6 @@ export class ProcessManager {
     let total = 0;
     for (const runtime of this.processes.values()) {
       if (runtime.shairport?.pid) total += 1;
-      if (runtime.ffmpeg?.pid) total += 1;
     }
     return total;
   }
@@ -94,32 +90,15 @@ export class ProcessManager {
   }
 
   private startBluetoothTarget(target: Target): void {
-    const fifoPath = path.join(this.options.fifoRoot, `${target.id}.pcm`);
     const mac = target.bluetooth_mac!;
 
     fs.mkdirSync(this.options.shairportConfigRoot, { recursive: true });
 
-    if (!fs.existsSync(fifoPath)) {
-      try {
-        execFileSync("mkfifo", [fifoPath]);
-      } catch (error) {
-        logger.error("mkfifo failed", {
-          targetId: target.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        this.options.onTargetError(target, "BT_CONNECT_FAILED", "mkfifo failed");
-        return;
-      }
-    }
-
     const runtime: RuntimeProcess = {
       target,
       shairport: null,
-      ffmpeg: null,
       btRetryTimer: null,
-      fifoPath,
-      hadAudio: false,
-      lastAudioAt: 0,
+      btConnected: false,
       state: "starting",
     };
 
@@ -130,10 +109,12 @@ export class ProcessManager {
       return;
     }
 
-    // Phase 1: Start shairport immediately so the AirPlay receiver is always visible.
+    // Phase 1: Start shairport with ALSA backend so the AirPlay receiver is
+    // always visible. Shairport opens the BlueALSA ALSA device only during an
+    // active AirPlay session, so the Echo will not disconnect due to silence.
     try {
       const shairportPorts = this.getShairportPorts(target.id);
-      const shairportConfigPath = this.writeShairportConfig(target, fifoPath, shairportPorts);
+      const shairportConfigPath = this.writeShairportConfig(target, mac, shairportPorts);
       const shairport = spawn(this.options.shairportBin, ["-c", shairportConfigPath], {
         stdio: ["ignore", "pipe", "pipe"],
       });
@@ -168,11 +149,11 @@ export class ProcessManager {
       return;
     }
 
-    // Phase 2: Connect BT + start ffmpeg in background, retry every 15s until success.
+    // Phase 2: Connect BT so BlueALSA sees the device when shairport needs it.
     const tryConnect = () => {
       if (runtime.state === "stopped") return;
-      if (runtime.ffmpeg?.pid) return; // already running
-      this.tryConnectBtAndStartFfmpeg(runtime, target, mac, fifoPath);
+      if (runtime.btConnected) return;
+      this.tryConnectBt(runtime, target, mac);
     };
 
     tryConnect();
@@ -192,16 +173,13 @@ export class ProcessManager {
     next();
   }
 
-  private tryConnectBtAndStartFfmpeg(
+  private tryConnectBt(
     runtime: RuntimeProcess,
     target: Target,
     mac: string,
-    fifoPath: string,
   ): void {
     this.enqueueBtConnect(() => {
-      logger.debug("trying BT connect", { targetId: target.id, mac });
-
-      if (runtime.state === "stopped" || runtime.ffmpeg?.pid) {
+      if (runtime.state === "stopped" || runtime.btConnected) {
         this.btConnecting = false;
         this.drainBtConnectQueue();
         return;
@@ -223,82 +201,45 @@ export class ProcessManager {
         this.drainBtConnectQueue();
 
         if (runtime.state === "stopped") return;
-        if (runtime.ffmpeg?.pid) return;
 
         const alreadyConnected = output.includes("AlreadyConnected") || output.includes("Already connected");
         const connectionBusy = output.includes("br-connection-busy");
         const success = code === 0 || output.includes("Connection successful") || alreadyConnected || connectionBusy;
+
         if (!success) {
           logger.info("BT not available yet, will retry", { targetId: target.id, mac, code, output: output.slice(0, 120) });
           return;
         }
 
-        // Give BlueALSA time to register the A2DP profile after BT connect.
-        const a2dpDelay = alreadyConnected ? 0 : 2000;
-        setTimeout(() => {
-          if (runtime.state === "stopped" || runtime.ffmpeg?.pid) return;
-
-          logger.info("BT connected, starting ffmpeg", { targetId: target.id, mac });
-
-          const ffmpegErrLines: string[] = [];
-          const ffmpeg = spawn(
-            this.options.ffmpegBin,
-            [
-              "-hide_banner", "-nostdin",
-              "-f", "s16le", "-ar", "44100", "-ac", "2",
-              "-i", fifoPath,
-              "-f", "alsa",
-              `bluealsa:DEV=${mac},PROFILE=a2dp`,
-            ],
-            { stdio: ["ignore", "pipe", "pipe"] },
-          );
-
-          ffmpeg.stderr.on("data", (chunk) => {
-            this.pushRecentLogLines(ffmpegErrLines, chunk.toString());
-          });
-
-          ffmpeg.on("exit", (exitCode) => {
-            if (runtime.state === "stopped") return;
-            logger.warn("ffmpeg exited, waiting for BT reconnect", {
-              targetId: target.id,
-              code: exitCode,
-              details: ffmpegErrLines.slice(-2).join(" | "),
-            });
-            runtime.ffmpeg = null;
-            if (runtime.hadAudio) {
-              runtime.hadAudio = false;
-              this.options.onAudioStop(runtime.target);
-            }
-          });
-
-          runtime.ffmpeg = ffmpeg;
-
-          // Detect audio start: after 3s with both processes alive
-          const startTimer = setTimeout(() => {
-            if (runtime.state === "running" && !runtime.hadAudio && runtime.ffmpeg?.pid) {
-              runtime.hadAudio = true;
-              runtime.lastAudioAt = Date.now();
-              this.options.onAudioStart(runtime.target);
-            }
-          }, 3000);
-          startTimer.unref();
-
-          logger.info("bluetooth target fully started", {
-            targetId: target.id,
-            mac,
-            shairportPid: runtime.shairport?.pid,
-            ffmpegPid: ffmpeg.pid,
-          });
-        }, a2dpDelay);
+        logger.info("BT connected", { targetId: target.id, mac });
+        runtime.btConnected = true;
+        this.options.onAudioStart(runtime.target);
       });
     });
   }
 
-  private writeShairportConfig(target: Target, fifoPath: string, ports: ShairportPorts): string {
+  private writeShairportConfig(target: Target, mac: string, ports: ShairportPorts): string {
     const confPath = path.join(this.options.shairportConfigRoot, `target-${target.id}.conf`);
     const safeName = target.airplay_name.replace(/"/g, "");
 
-    const content = `general = {\n  name = \"${safeName}\";\n  output_backend = \"pipe\";\n  port = ${ports.raopPort};\n  udp_port_base = ${ports.udpPortBase};\n  udp_port_range = ${ports.udpPortRange};\n};\n\npipe = {\n  name = \"${fifoPath}\";\n  format = \"S16\";\n};\n`;
+    // Use ALSA backend pointing directly at the BlueALSA PCM device.
+    // Shairport opens the device only during an active session, avoiding
+    // the A2DP silence-timeout that plagued the old pipe+ffmpeg approach.
+    const content = [
+      `general = {`,
+      `  name = "${safeName}";`,
+      `  output_backend = "alsa";`,
+      `  port = ${ports.raopPort};`,
+      `  udp_port_base = ${ports.udpPortBase};`,
+      `  udp_port_range = ${ports.udpPortRange};`,
+      `};`,
+      ``,
+      `alsa = {`,
+      `  output_device = "bluealsa:DEV=${mac},PROFILE=a2dp";`,
+      `  mixer_control_name = "";`,
+      `};`,
+      ``,
+    ].join("\n");
 
     fs.writeFileSync(confPath, content, { encoding: "utf8" });
     return confPath;
@@ -343,10 +284,9 @@ export class ProcessManager {
     }
 
     if (runtime.shairport?.pid) runtime.shairport.kill("SIGTERM");
-    if (runtime.ffmpeg?.pid) runtime.ffmpeg.kill("SIGTERM");
 
-    if (runtime.hadAudio) {
-      runtime.hadAudio = false;
+    if (runtime.btConnected) {
+      runtime.btConnected = false;
       this.options.onAudioStop(runtime.target);
     }
 
