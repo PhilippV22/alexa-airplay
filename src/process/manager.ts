@@ -235,7 +235,7 @@ export class ProcessManager {
       `};`,
       ``,
       `alsa = {`,
-      `  output_device = "bluealsa:DEV=${mac},PROFILE=a2dp";`,
+      `  output_device = "bluealsa:DEV=${mac}";`,
       `  mixer_control_name = "";`,
       `};`,
       ``,
