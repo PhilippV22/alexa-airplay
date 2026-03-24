@@ -140,7 +140,9 @@ export class ProcessManager {
       const shairportErrLines: string[] = [];
 
       shairport.stderr.on("data", (chunk) => {
-        this.pushRecentLogLines(shairportErrLines, chunk.toString());
+        const text = chunk.toString();
+        this.pushRecentLogLines(shairportErrLines, text);
+        logger.info("shairport stderr", { targetId: target.id, output: text.trim().slice(0, 200) });
       });
       shairport.on("exit", (code) => {
         if (runtime.state === "stopped") return;
