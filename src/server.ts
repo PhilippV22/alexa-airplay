@@ -93,7 +93,11 @@ export async function createApp(): Promise<AppBundle> {
     },
     onTargetError: (target: Target, code, details) => {
       logger.error("target error", { targetId: target.id, code, details });
-      store.updateTarget(target.id, { status: "error" });
+      // For BT_CONNECT_FAILED don't mark as "error" — the Echo may just be
+      // sleeping or not in BT mode yet. The 30s reconcile loop will retry.
+      if (code !== "BT_CONNECT_FAILED") {
+        store.updateTarget(target.id, { status: "error" });
+      }
     },
   });
 
