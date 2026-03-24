@@ -103,8 +103,8 @@ if ! id -u "${APP_USER}" >/dev/null 2>&1; then
   useradd --system --gid "${APP_GROUP}" --home "${APP_DIR}" --shell /usr/sbin/nologin "${APP_USER}"
 fi
 
-# Bluetooth: airbridge user muss in bluetooth-Gruppe sein
-usermod -aG bluetooth "${APP_USER}" 2>/dev/null || true
+# Bluetooth + BlueALSA D-Bus: airbridge user braucht bluetooth und audio Gruppe
+usermod -aG bluetooth,audio "${APP_USER}" 2>/dev/null || true
 
 # BlueALSA daemon aktivieren (stellt ALSA BT-Devices bereit)
 systemctl enable --now bluealsa.service 2>/dev/null || true
