@@ -38,6 +38,8 @@ const BT_RETRY_INTERVAL_MS = 15_000;
 export class ProcessManager {
   private readonly options: ProcessManagerOptions;
   private readonly processes = new Map<number, RuntimeProcess>();
+  private btConnecting = false;
+  private readonly btConnectQueue: Array<() => void> = [];
 
   constructor(options: ProcessManagerOptions) {
     this.options = options;
@@ -176,34 +178,56 @@ export class ProcessManager {
     runtime.btRetryTimer.unref();
   }
 
+  private enqueueBtConnect(fn: () => void): void {
+    this.btConnectQueue.push(fn);
+    this.drainBtConnectQueue();
+  }
+
+  private drainBtConnectQueue(): void {
+    if (this.btConnecting || this.btConnectQueue.length === 0) return;
+    this.btConnecting = true;
+    const next = this.btConnectQueue.shift()!;
+    next();
+  }
+
   private tryConnectBtAndStartFfmpeg(
     runtime: RuntimeProcess,
     target: Target,
     mac: string,
     fifoPath: string,
   ): void {
-    logger.debug("trying BT connect", { targetId: target.id, mac });
+    this.enqueueBtConnect(() => {
+      logger.debug("trying BT connect", { targetId: target.id, mac });
 
-    const btProcess = spawn("bluetoothctl", ["connect", mac], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let output = "";
-    btProcess.stdout.on("data", (d: Buffer) => { output += d.toString(); });
-    btProcess.stderr.on("data", (d: Buffer) => { output += d.toString(); });
-
-    const killTimer = setTimeout(() => btProcess.kill(), 15_000);
-
-    btProcess.on("close", (code) => {
-      clearTimeout(killTimer);
-      if (runtime.state === "stopped") return;
-      if (runtime.ffmpeg?.pid) return;
-
-      const success = code === 0 || output.includes("Connection successful");
-      if (!success) {
-        logger.debug("BT not available yet, will retry", { targetId: target.id, mac, code });
+      if (runtime.state === "stopped" || runtime.ffmpeg?.pid) {
+        this.btConnecting = false;
+        this.drainBtConnectQueue();
         return;
       }
+
+      const btProcess = spawn("bluetoothctl", ["connect", mac], {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+
+      let output = "";
+      btProcess.stdout.on("data", (d: Buffer) => { output += d.toString(); });
+      btProcess.stderr.on("data", (d: Buffer) => { output += d.toString(); });
+
+      const killTimer = setTimeout(() => btProcess.kill(), 15_000);
+
+      btProcess.on("close", (code) => {
+        clearTimeout(killTimer);
+        this.btConnecting = false;
+        this.drainBtConnectQueue();
+
+        if (runtime.state === "stopped") return;
+        if (runtime.ffmpeg?.pid) return;
+
+        const success = code === 0 || output.includes("Connection successful");
+        if (!success) {
+          logger.debug("BT not available yet, will retry", { targetId: target.id, mac, code });
+          return;
+        }
 
       logger.info("BT connected, starting ffmpeg", { targetId: target.id, mac });
 
@@ -255,6 +279,7 @@ export class ProcessManager {
         mac,
         shairportPid: runtime.shairport?.pid,
         ffmpegPid: ffmpeg.pid,
+      });
       });
     });
   }
