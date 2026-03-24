@@ -241,41 +241,11 @@ export function mainPageHtml(adminUser: string): string {
 
       <h3>Basis Konfiguration</h3>
       <div class="row">
-        <label>Stream Base URL
-          <input id="cfg-stream-base" placeholder="https://stream.airbridge.example.com" />
-        </label>
         <label>Bind Host
           <input id="cfg-bind-host" placeholder="0.0.0.0" />
         </label>
         <label>Port
           <input id="cfg-port" placeholder="3000" />
-        </label>
-        <label>Alexa Invoke Mode
-          <select id="cfg-alexa-mode">
-            <option value="mock">mock</option>
-            <option value="alexa_remote2">alexa_remote2</option>
-          </select>
-        </label>
-        <label>Alexa Init Timeout (Sek.)
-          <input id="cfg-alexa-init-timeout" placeholder="60" />
-        </label>
-        <label>Alexa Invocation Prefix
-          <input id="cfg-alexa-prefix" placeholder="ask air bridge to play token" />
-        </label>
-        <label>Alexa Skill Invocation Name
-          <input id="cfg-skill-invocation-name" placeholder="air bridge" />
-        </label>
-        <label>Alexa Prefix Fallbacks (|)
-          <input id="cfg-prefix-fallbacks" placeholder="frage air bridge spiele token|open air bridge and play token" />
-        </label>
-        <label>Skill Invoke Timeout (Sek.)
-          <input id="cfg-skill-timeout" placeholder="6" />
-        </label>
-        <label>Skill Invoke Retry Count
-          <input id="cfg-skill-retries" placeholder="2" />
-        </label>
-        <label>Alexa Skill App ID
-          <input id="cfg-skill-app-id" placeholder="amzn1.ask.skill.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
         </label>
         <label>Session Secret
           <input id="cfg-session-secret" placeholder="long random secret" />
@@ -312,85 +282,12 @@ export function mainPageHtml(adminUser: string): string {
         <button class="success" id="save-admin-password">Passwort speichern</button>
       </div>
       <p class="msg" id="password-message"></p>
-
-      <h3>Alexa Cookie Wizard (Automatisch)</h3>
-      <div class="row">
-        <label>Amazon Region Domain
-          <select id="alexa-wizard-amazon-page">
-            <option value="amazon.de">amazon.de</option>
-            <option value="amazon.com">amazon.com</option>
-            <option value="amazon.co.uk">amazon.co.uk</option>
-            <option value="amazon.fr">amazon.fr</option>
-            <option value="amazon.it">amazon.it</option>
-            <option value="amazon.es">amazon.es</option>
-            <option value="amazon.co.jp">amazon.co.jp</option>
-          </select>
-        </label>
-        <label>Proxy Host (wie im Browser aufgerufen)
-          <input id="alexa-wizard-proxy-host" placeholder="192.168.1.10" />
-        </label>
-        <label>Proxy Port
-          <input id="alexa-wizard-proxy-port" value="3457" />
-        </label>
-      </div>
-      <div class="row" style="margin-top:8px;">
-        <button class="success" id="start-alexa-wizard">Wizard starten</button>
-        <button class="secondary" id="refresh-alexa-wizard">Wizard Status</button>
-        <button class="danger" id="stop-alexa-wizard">Wizard stoppen</button>
-      </div>
-      <p class="msg" id="alexa-wizard-message"></p>
-      <div class="status-item" id="alexa-wizard-status">Kein Wizard aktiv.</div>
-
-      <h3>Alexa Cookie (manueller Fallback)</h3>
-      <label>
-        Cookie Inhalt
-        <textarea id="alexa-cookie" placeholder="Alexa Session Cookie hier einfuegen"></textarea>
-      </label>
-      <div class="row">
-        <button class="success" id="save-cookie">Cookie speichern</button>
-      </div>
-      <p class="msg" id="cookie-message"></p>
-
-      <h3>Cloudflared Konfiguration</h3>
-      <label>
-        /etc/airbridge/cloudflared.yml
-        <textarea id="cloudflared-config" placeholder="tunnel: ..."></textarea>
-      </label>
-      <div class="row">
-        <button class="secondary" id="save-cloudflared">Cloudflared Konfiguration speichern</button>
-      </div>
-      <p class="msg" id="cloudflared-message"></p>
-    </section>
-
-    <section>
-      <h2>Target anlegen</h2>
-      <div class="row">
-        <label>Name
-          <input id="name" placeholder="Wohnzimmer Echo" />
-        </label>
-        <label>Type
-          <select id="type">
-            <option value="device">device</option>
-            <option value="group">group</option>
-          </select>
-        </label>
-        <label>alexa_device_id
-          <input id="deviceId" placeholder="A3XXXXXXXXXXXX" />
-        </label>
-        <label>alexa_group_id
-          <input id="groupId" placeholder="amzn1.alexa.group..." />
-        </label>
-      </div>
-      <div class="row" style="margin-top:8px;">
-        <button id="create">Target erstellen</button>
-      </div>
-      <p class="msg" id="create-error"></p>
     </section>
 
     <section style="grid-column: 1 / -1;">
       <h2>Bluetooth Setup</h2>
       <p style="color:var(--muted);font-size:0.85rem;margin:0 0 8px;">
-        Alexa in Pairing-Modus setzen (Alexa-App → Geraet → Bluetooth → Neues Geraet koppeln), dann "Scannen".
+        Echo in Pairing-Modus setzen (Alexa-App → Geraet → Bluetooth → Neues Geraet koppeln), dann "Scannen".
       </p>
       <div class="row" style="margin-bottom:8px;">
         <button class="success" id="bt-scan">Bluetooth scannen (~8s)</button>
@@ -402,31 +299,17 @@ export function mainPageHtml(adminUser: string): string {
 
     <section style="grid-column: 1 / -1;">
       <h2>Targets</h2>
-      <div class="row" style="margin-bottom: 8px;">
-        <button class="success" id="import-alexa-devices">Alexa Devices importieren</button>
-      </div>
-      <p class="msg" id="import-message"></p>
       <table>
         <thead>
           <tr>
-            <th>ID</th><th>Name</th><th>Type</th><th>AirPlay</th><th>Status</th><th>Enabled</th><th>Aktion</th>
+            <th>ID</th><th>Name</th><th>MAC</th><th>AirPlay</th><th>Status</th><th>Enabled</th><th>Aktion</th>
           </tr>
         </thead>
         <tbody id="targets"></tbody>
       </table>
     </section>
 
-    <section>
-      <h2>Sessions</h2>
-      <table>
-        <thead>
-          <tr><th>ID</th><th>Target</th><th>State</th><th>URL</th><th>Start</th><th>Ende</th></tr>
-        </thead>
-        <tbody id="sessions"></tbody>
-      </table>
-    </section>
-
-    <section>
+    <section style="grid-column: 1 / -1;">
       <h2>Audit</h2>
       <table>
         <thead>
@@ -439,41 +322,23 @@ export function mainPageHtml(adminUser: string): string {
 
   <script>
     var setupKeyMap = {
-      AIRBRIDGE_STREAM_BASE_URL: 'cfg-stream-base',
       AIRBRIDGE_BIND_HOST: 'cfg-bind-host',
       AIRBRIDGE_PORT: 'cfg-port',
-      AIRBRIDGE_ALEXA_INVOKE_MODE: 'cfg-alexa-mode',
-      AIRBRIDGE_ALEXA_INIT_TIMEOUT_SECONDS: 'cfg-alexa-init-timeout',
-      AIRBRIDGE_ALEXA_INVOCATION_PREFIX: 'cfg-alexa-prefix',
-      AIRBRIDGE_ALEXA_SKILL_INVOCATION_NAME: 'cfg-skill-invocation-name',
-      AIRBRIDGE_ALEXA_INVOCATION_PREFIX_FALLBACKS: 'cfg-prefix-fallbacks',
-      AIRBRIDGE_ALEXA_SKILL_INVOKE_TIMEOUT_SECONDS: 'cfg-skill-timeout',
-      AIRBRIDGE_ALEXA_SKILL_INVOKE_RETRY_COUNT: 'cfg-skill-retries',
-      AIRBRIDGE_SKILL_APP_ID: 'cfg-skill-app-id',
       AIRBRIDGE_SESSION_SECRET: 'cfg-session-secret',
       AIRBRIDGE_ADMIN_USER: 'cfg-admin-user',
       AIRBRIDGE_FFMPEG_BITRATE: 'cfg-ffmpeg-bitrate',
       AIRBRIDGE_SHAIRPORT_BIN: 'cfg-shairport-bin',
       AIRBRIDGE_FFMPEG_BIN: 'cfg-ffmpeg-bin'
     };
-    var alexaWizardPollTimer = null;
-    var alexaAutoImportAttempted = false;
-    var alexaImportInFlight = false;
 
     function setMessage(id, text, isError, isSuccess) {
       var el = document.getElementById(id);
-      if (!el) {
-        return;
-      }
+      if (!el) { return; }
       el.textContent = text || '';
       el.classList.remove('err');
       el.classList.remove('ok');
-      if (isError) {
-        el.classList.add('err');
-      }
-      if (isSuccess) {
-        el.classList.add('ok');
-      }
+      if (isError) { el.classList.add('err'); }
+      if (isSuccess) { el.classList.add('ok'); }
     }
 
     function escapeHtml(value) {
@@ -510,11 +375,6 @@ export function mainPageHtml(adminUser: string): string {
 
       renderSetupStatus(statusBody.status);
       fillSetupConfig(configBody.values || {});
-      document.getElementById('cloudflared-config').value = configBody.cloudflaredConfig || '';
-
-      if (!document.getElementById('alexa-wizard-proxy-host').value) {
-        document.getElementById('alexa-wizard-proxy-host').value = window.location.hostname;
-      }
 
       try {
         var healthRes = await fetch('/health/setup');
@@ -524,7 +384,6 @@ export function mainPageHtml(adminUser: string): string {
         }
       } catch (_e) { /* ignore */ }
 
-      await refreshAlexaWizardStatus();
       setMessage('setup-message', 'Setup geladen.', false, true);
     }
 
@@ -535,11 +394,10 @@ export function mainPageHtml(adminUser: string): string {
       var items = [
         ['ENV File', status.envFileExists, status.envFileExists ? 'vorhanden' : 'fehlt'],
         ['ENV write', status.envWritable, status.envWritable ? 'ok' : 'kein Zugriff'],
-        ['Cookie plain', status.plainCookieExists, status.plainCookieExists ? 'vorhanden' : 'fehlt'],
         ['Admin Hash', status.hasAdminPasswordHash, status.hasAdminPasswordHash ? 'gesetzt' : 'fehlt'],
         ['Session Secret', status.hasSessionSecret, status.hasSessionSecret ? 'gesetzt' : 'fehlt'],
-        ['AirBridge Service', status.services.airbridge.active === 'active', status.services.airbridge.active + ' / ' + status.services.airbridge.enabled],
-        ['Cloudflared Service', status.services.cloudflared.active === 'active', status.services.cloudflared.active + ' / ' + status.services.cloudflared.enabled]
+        ['AirBridge Service', status.services && status.services.airbridge && status.services.airbridge.active === 'active',
+          status.services && status.services.airbridge ? (status.services.airbridge.active + ' / ' + status.services.airbridge.enabled) : 'unbekannt']
       ];
 
       for (var i = 0; i < items.length; i += 1) {
@@ -559,10 +417,9 @@ export function mainPageHtml(adminUser: string): string {
       if (!checklist) return;
 
       var checks = [
-        { label: 'Stream-URL', ok: health.streamUrl.ok, hint: health.streamUrl.ok ? health.streamUrl.value : 'Platzhalter – Stream-URL in Basis Konfiguration setzen' },
-        { label: 'Alexa Cookie', ok: health.alexaCookie.ok, hint: health.alexaCookie.ok ? 'konfiguriert' : (health.alexaCookie.reason || 'fehlt') },
-        { label: 'shairport-sync', ok: health.shairportBin.ok, hint: health.shairportBin.ok ? health.shairportBin.path : 'nicht gefunden: ' + health.shairportBin.path },
-        { label: 'ffmpeg', ok: health.ffmpegBin.ok, hint: health.ffmpegBin.ok ? health.ffmpegBin.path : 'nicht gefunden: ' + health.ffmpegBin.path }
+        { label: 'shairport-sync', ok: health.shairportBin && health.shairportBin.ok, hint: health.shairportBin && health.shairportBin.ok ? health.shairportBin.path : 'nicht gefunden: ' + (health.shairportBin && health.shairportBin.path) },
+        { label: 'ffmpeg', ok: health.ffmpegBin && health.ffmpegBin.ok, hint: health.ffmpegBin && health.ffmpegBin.ok ? health.ffmpegBin.path : 'nicht gefunden: ' + (health.ffmpegBin && health.ffmpegBin.path) },
+        { label: 'Aktive Targets', ok: health.activeTargets && health.activeTargets.ok, hint: health.activeTargets ? (health.activeTargets.count + ' Target(s) aktiv') : '0 Targets – Bluetooth Setup oben nutzen' }
       ];
 
       var allOk = checks.every(function (c) { return c.ok; });
@@ -582,7 +439,7 @@ export function mainPageHtml(adminUser: string): string {
         var icon = c.ok ? '✅' : '❌';
         html += '<div style="padding:7px 10px;border-radius:8px;border:1px solid ' + border + ';background:' + bg + ';font-size:0.8rem;">';
         html += '<b style="display:block;margin-bottom:2px;">' + icon + ' ' + escapeHtml(c.label) + '</b>';
-        html += '<span style="color:#9fb4cc;">' + escapeHtml(c.hint) + '</span>';
+        html += '<span style="color:#9fb4cc;">' + escapeHtml(c.hint || '') + '</span>';
         html += '</div>';
       }
       html += '</div>';
@@ -596,9 +453,7 @@ export function mainPageHtml(adminUser: string): string {
         var key = keys[i];
         var id = setupKeyMap[key];
         var input = document.getElementById(id);
-        if (input) {
-          input.value = values[key] || '';
-        }
+        if (input) { input.value = values[key] || ''; }
       }
 
       document.getElementById('cfg-trust-proxy').checked = parseBool(values.AIRBRIDGE_TRUST_PROXY);
@@ -616,7 +471,6 @@ export function mainPageHtml(adminUser: string): string {
 
       values.AIRBRIDGE_TRUST_PROXY = document.getElementById('cfg-trust-proxy').checked;
       values.AIRBRIDGE_SPAWN_PROCESSES = document.getElementById('cfg-spawn-processes').checked;
-      values.AIRBRIDGE_SETUP_ALLOW_CREDENTIAL_ENCRYPTION = false;
       return values;
     }
 
@@ -662,190 +516,6 @@ export function mainPageHtml(adminUser: string): string {
       await loadSetup();
     }
 
-    async function saveAlexaCookie() {
-      var cookie = document.getElementById('alexa-cookie').value;
-      if (!cookie.trim()) {
-        setMessage('cookie-message', 'Cookie darf nicht leer sein.', true, false);
-        return;
-      }
-
-      setMessage('cookie-message', 'Speichere Cookie ...');
-      var res = await api('/api/setup/alexa-cookie', {
-        method: 'POST',
-        body: JSON.stringify({
-          cookie: cookie,
-          preferEncrypted: false
-        })
-      });
-
-      var body = await res.json().catch(function () { return {}; });
-      if (!res.ok) {
-        setMessage('cookie-message', body.message || 'Cookie konnte nicht gespeichert werden', true, false);
-        return;
-      }
-
-      document.getElementById('alexa-cookie').value = '';
-      setMessage('cookie-message', 'Cookie gespeichert (' + body.result.mode + '). Danach Neustart ausfuehren.', false, true);
-      await loadSetup();
-    }
-
-    function stopAlexaWizardPolling() {
-      if (alexaWizardPollTimer) {
-        clearInterval(alexaWizardPollTimer);
-        alexaWizardPollTimer = null;
-      }
-    }
-
-    function renderAlexaWizardState(state) {
-      var statusEl = document.getElementById('alexa-wizard-status');
-      var statusText = 'Status: ' + (state.status || 'unknown');
-      if (state.message) {
-        statusText += ' | ' + state.message;
-      }
-      if (state.error) {
-        statusText += ' | Error: ' + state.error;
-      }
-      if (state.loginUrl) {
-        statusText += ' | Login URL: ' + state.loginUrl;
-      }
-      statusEl.textContent = statusText;
-    }
-
-    async function refreshAlexaWizardStatus() {
-      var res = await api('/api/setup/alexa-cookie/wizard/status');
-      if (!res.ok) {
-        var errBody = await res.json().catch(function () { return {}; });
-        setMessage('alexa-wizard-message', errBody.message || 'Wizard Status konnte nicht geladen werden', true, false);
-        return;
-      }
-
-      var body = await res.json();
-      var state = body.state || {};
-      renderAlexaWizardState(state);
-
-      if (state.status === 'awaiting_login' && state.loginUrl) {
-        setMessage('alexa-wizard-message', 'Amazon Login in neuem Tab oeffnen und anmelden. Cookie wird automatisch gespeichert.', false, true);
-      } else if (state.status === 'completed') {
-        setMessage('alexa-wizard-message', state.message || 'Cookie automatisch gespeichert. Bitte AirBridge neu starten.', false, true);
-      } else if (state.status === 'failed') {
-        setMessage('alexa-wizard-message', state.error || state.message || 'Wizard fehlgeschlagen', true, false);
-      } else if (state.status === 'stopped') {
-        setMessage('alexa-wizard-message', state.message || 'Wizard gestoppt.', false, true);
-      } else if (state.status === 'starting') {
-        setMessage('alexa-wizard-message', 'Wizard startet ...', false, false);
-      }
-
-      if (state.status === 'completed' || state.status === 'failed' || state.status === 'stopped' || state.status === 'idle') {
-        stopAlexaWizardPolling();
-        if (state.status === 'completed') {
-          await loadSetup();
-        }
-      }
-    }
-
-    function startAlexaWizardPolling() {
-      stopAlexaWizardPolling();
-      alexaWizardPollTimer = setInterval(function () {
-        refreshAlexaWizardStatus().catch(function () {});
-      }, 2000);
-    }
-
-    function defaultBaseAmazonPage(amazonPage) {
-      if (amazonPage === 'amazon.co.jp') {
-        return 'amazon.co.jp';
-      }
-      return 'amazon.com';
-    }
-
-    function defaultLanguage(amazonPage) {
-      if (amazonPage === 'amazon.de') return 'de-DE';
-      if (amazonPage === 'amazon.co.uk') return 'en-GB';
-      if (amazonPage === 'amazon.fr') return 'fr-FR';
-      if (amazonPage === 'amazon.it') return 'it-IT';
-      if (amazonPage === 'amazon.es') return 'es-ES';
-      if (amazonPage === 'amazon.co.jp') return 'ja-JP';
-      return 'en-US';
-    }
-
-    async function startAlexaWizard() {
-      var amazonPage = document.getElementById('alexa-wizard-amazon-page').value;
-      var proxyHostInput = document.getElementById('alexa-wizard-proxy-host').value.trim();
-      var proxyPortInput = document.getElementById('alexa-wizard-proxy-port').value.trim();
-      var proxyPort = Number.parseInt(proxyPortInput || '3457', 10);
-      if (Number.isNaN(proxyPort) || proxyPort < 1 || proxyPort > 65535) {
-        setMessage('alexa-wizard-message', 'Proxy Port ist ungueltig.', true, false);
-        return;
-      }
-
-      setMessage('alexa-wizard-message', 'Starte Wizard ...');
-      var res = await api('/api/setup/alexa-cookie/wizard/start', {
-        method: 'POST',
-        body: JSON.stringify({
-          amazonPage: amazonPage,
-          baseAmazonPage: defaultBaseAmazonPage(amazonPage),
-          acceptLanguage: defaultLanguage(amazonPage),
-          proxyHost: proxyHostInput || undefined,
-          proxyPort: proxyPort,
-          preferEncrypted: false
-        })
-      });
-
-      var body = await res.json().catch(function () { return {}; });
-      if (!res.ok) {
-        setMessage('alexa-wizard-message', body.message || 'Wizard konnte nicht gestartet werden', true, false);
-        return;
-      }
-
-      renderAlexaWizardState(body.state || {});
-      setMessage('alexa-wizard-message', 'Wizard gestartet. Login-Fenster wird geoeffnet ...', false, true);
-
-      var loginUrl = body.state && body.state.loginUrl;
-      if (loginUrl) {
-        window.open(loginUrl, '_blank', 'noopener,noreferrer');
-      }
-
-      startAlexaWizardPolling();
-      await refreshAlexaWizardStatus();
-    }
-
-    async function stopAlexaWizard() {
-      var res = await api('/api/setup/alexa-cookie/wizard/stop', {
-        method: 'POST',
-        body: JSON.stringify({})
-      });
-      var body = await res.json().catch(function () { return {}; });
-      if (!res.ok) {
-        setMessage('alexa-wizard-message', body.message || 'Wizard konnte nicht gestoppt werden', true, false);
-        return;
-      }
-      stopAlexaWizardPolling();
-      renderAlexaWizardState(body.state || {});
-      setMessage('alexa-wizard-message', 'Wizard gestoppt.', false, true);
-    }
-
-    async function saveCloudflaredConfig() {
-      var content = document.getElementById('cloudflared-config').value;
-      if (!content.trim()) {
-        setMessage('cloudflared-message', 'Cloudflared Konfiguration darf nicht leer sein.', true, false);
-        return;
-      }
-
-      setMessage('cloudflared-message', 'Speichere Cloudflared Config ...');
-      var res = await api('/api/setup/cloudflared', {
-        method: 'PUT',
-        body: JSON.stringify({ content: content })
-      });
-
-      if (!res.ok) {
-        var body = await res.json().catch(function () { return {}; });
-        setMessage('cloudflared-message', body.message || 'Fehler beim Speichern', true, false);
-        return;
-      }
-
-      setMessage('cloudflared-message', 'Cloudflared Konfiguration gespeichert.', false, true);
-      await loadSetup();
-    }
-
     async function applyRestart() {
       setMessage('setup-message', 'Neustart wird vorbereitet ...');
       var res = await api('/api/setup/apply', {
@@ -860,87 +530,17 @@ export function mainPageHtml(adminUser: string): string {
       }
 
       setMessage('setup-message', 'Neustart ausgeloest. Verbindung wird kurz unterbrochen.', false, true);
-      setTimeout(function () {
-        window.location.reload();
-      }, 5000);
+      setTimeout(function () { window.location.reload(); }, 5000);
     }
 
-    async function importAlexaDevices(silent) {
-      if (alexaImportInFlight) {
-        return;
-      }
-      alexaImportInFlight = true;
-
-      if (!silent) {
-        setMessage('import-message', 'Importiere Alexa Devices ...');
-      }
-
-      try {
-        var res = await api('/api/targets/import/alexa-devices', {
-          method: 'POST',
-          body: JSON.stringify({ enabled: true })
-        });
-        var body = await res.json().catch(function () { return {}; });
-        if (!res.ok) {
-          if (!silent) {
-            setMessage('import-message', body.message || 'Import fehlgeschlagen', true, false);
-          }
-          return;
-        }
-
-        setMessage(
-          'import-message',
-          'Import abgeschlossen: ' + body.created + ' neu, ' + body.skipped + ' bereits vorhanden, ' + body.discovered + ' gefunden.',
-          false,
-          true
-        );
-        await refreshRuntimeTables(true);
-      } finally {
-        alexaImportInFlight = false;
-      }
-    }
-
-    async function maybeAutoImportAlexaDevices(targetsBody) {
-      if (alexaAutoImportAttempted) {
-        return false;
-      }
-
-      var targets = targetsBody.targets || [];
-      var hasDeviceTargets = targets.some(function (target) {
-        return target.type === 'device';
-      });
-      if (hasDeviceTargets) {
-        alexaAutoImportAttempted = true;
-        return false;
-      }
-
-      var alexaInfo = targetsBody.alexa || {};
-      if (alexaInfo.mode !== 'alexa_remote2' || !alexaInfo.initialized) {
-        return false;
-      }
-
-      alexaAutoImportAttempted = true;
-      await importAlexaDevices(true);
-      return true;
-    }
-
-    async function refreshRuntimeTables(skipAutoImport) {
+    async function refreshRuntimeTables() {
       var responses = await Promise.all([
         api('/api/targets'),
-        api('/api/sessions'),
         api('/api/audit')
       ]);
 
       var targetsBody = await responses[0].json();
-      var sessionsBody = await responses[1].json();
-      var auditBody = await responses[2].json();
-
-      if (!skipAutoImport) {
-        var imported = await maybeAutoImportAlexaDevices(targetsBody);
-        if (imported) {
-          return;
-        }
-      }
+      var auditBody = await responses[1].json();
 
       var targetsEl = document.getElementById('targets');
       targetsEl.innerHTML = '';
@@ -950,7 +550,7 @@ export function mainPageHtml(adminUser: string): string {
         tr.innerHTML =
           '<td>' + escapeHtml(t.id) + '</td>' +
           '<td>' + escapeHtml(t.name) + '</td>' +
-          '<td>' + escapeHtml(t.type) + '</td>' +
+          '<td>' + escapeHtml(t.bluetooth_mac || '') + '</td>' +
           '<td>' + escapeHtml(t.airplay_name) + '</td>' +
           '<td>' + escapeHtml(t.status) + '</td>' +
           '<td>' + (t.enabled ? 'yes' : 'no') + '</td>' +
@@ -1004,22 +604,6 @@ export function mainPageHtml(adminUser: string): string {
         targetsEl.appendChild(tr);
       }
 
-      var sessionsEl = document.getElementById('sessions');
-      sessionsEl.innerHTML = '';
-      var sessions = sessionsBody.sessions || [];
-      for (var s = 0; s < Math.min(sessions.length, 60); s += 1) {
-        var session = sessions[s];
-        var trSession = document.createElement('tr');
-        trSession.innerHTML =
-          '<td>' + escapeHtml(session.id) + '</td>' +
-          '<td>' + escapeHtml(session.target_id) + '</td>' +
-          '<td>' + escapeHtml(session.state) + '</td>' +
-          '<td>' + escapeHtml(session.stream_url) + '</td>' +
-          '<td>' + escapeHtml(session.started_at) + '</td>' +
-          '<td>' + escapeHtml(session.ended_at || '') + '</td>';
-        sessionsEl.appendChild(trSession);
-      }
-
       var auditEl = document.getElementById('audit');
       auditEl.innerHTML = '';
       var auditRows = auditBody.audit || [];
@@ -1037,117 +621,7 @@ export function mainPageHtml(adminUser: string): string {
       }
     }
 
-    async function createTarget() {
-      var payload = {
-        name: document.getElementById('name').value,
-        type: document.getElementById('type').value,
-        alexa_device_id: document.getElementById('deviceId').value || undefined,
-        alexa_group_id: document.getElementById('groupId').value || undefined,
-        enabled: false
-      };
-
-      if (!payload.name || !payload.type) {
-        setMessage('create-error', 'Name und Type sind Pflichtfelder.', true, false);
-        return;
-      }
-
-      setMessage('create-error', 'Target wird erstellt ...');
-      var res = await api('/api/targets', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        var body = await res.json().catch(function () { return {}; });
-        setMessage('create-error', body.message || 'Anlegen fehlgeschlagen', true, false);
-        return;
-      }
-
-      document.getElementById('name').value = '';
-      document.getElementById('deviceId').value = '';
-      document.getElementById('groupId').value = '';
-      setMessage('create-error', 'Target erstellt.', false, true);
-      await refreshRuntimeTables();
-    }
-
-    document.getElementById('refresh-setup').onclick = function () {
-      loadSetup().catch(function (error) {
-        setMessage('setup-message', error.message || 'Setup konnte nicht geladen werden', true, false);
-      });
-    };
-
-    document.getElementById('save-config').onclick = function () {
-      saveSetupConfig().catch(function (error) {
-        setMessage('config-message', error.message || 'Fehler beim Speichern', true, false);
-      });
-    };
-
-    document.getElementById('save-admin-password').onclick = function () {
-      saveAdminPassword().catch(function (error) {
-        setMessage('password-message', error.message || 'Fehler beim Speichern', true, false);
-      });
-    };
-
-    document.getElementById('save-cookie').onclick = function () {
-      saveAlexaCookie().catch(function (error) {
-        setMessage('cookie-message', error.message || 'Fehler beim Speichern', true, false);
-      });
-    };
-
-    document.getElementById('start-alexa-wizard').onclick = function () {
-      startAlexaWizard().catch(function (error) {
-        setMessage('alexa-wizard-message', error.message || 'Wizard Start fehlgeschlagen', true, false);
-      });
-    };
-
-    document.getElementById('refresh-alexa-wizard').onclick = function () {
-      refreshAlexaWizardStatus().catch(function (error) {
-        setMessage('alexa-wizard-message', error.message || 'Wizard Status fehlgeschlagen', true, false);
-      });
-    };
-
-    document.getElementById('stop-alexa-wizard').onclick = function () {
-      stopAlexaWizard().catch(function (error) {
-        setMessage('alexa-wizard-message', error.message || 'Wizard Stop fehlgeschlagen', true, false);
-      });
-    };
-
-    document.getElementById('save-cloudflared').onclick = function () {
-      saveCloudflaredConfig().catch(function (error) {
-        setMessage('cloudflared-message', error.message || 'Fehler beim Speichern', true, false);
-      });
-    };
-
-    document.getElementById('apply-restart').onclick = function () {
-      applyRestart().catch(function (error) {
-        setMessage('setup-message', error.message || 'Neustart fehlgeschlagen', true, false);
-      });
-    };
-
-    document.getElementById('create').onclick = function () {
-      createTarget().catch(function (error) {
-        setMessage('create-error', error.message || 'Fehler beim Erstellen', true, false);
-      });
-    };
-
-    document.getElementById('import-alexa-devices').onclick = function () {
-      importAlexaDevices(false).catch(function (error) {
-        setMessage('import-message', error.message || 'Import fehlgeschlagen', true, false);
-      });
-    };
-
-    document.getElementById('reload-all').onclick = function () {
-      Promise.all([loadSetup(), refreshRuntimeTables()]).catch(function (error) {
-        setMessage('setup-message', error.message || 'Aktualisierung fehlgeschlagen', true, false);
-      });
-    };
-
-    document.getElementById('logout').onclick = async function () {
-      await api('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
-      window.location.href = '/login';
-    };
-
-    function renderBtDevices(devices, isKnown) {
+    function renderBtDevices(devices) {
       var el = document.getElementById('bt-devices');
       el.innerHTML = '';
       if (!devices.length) {
@@ -1159,7 +633,7 @@ export function mainPageHtml(adminUser: string): string {
         var card = document.createElement('div');
         card.style.cssText = 'padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card-2);font-size:0.82rem;display:flex;align-items:center;gap:10px;';
         var label = document.createElement('span');
-        label.textContent = escapeHtml(d.name) + '  (' + escapeHtml(d.mac) + ')';
+        label.textContent = d.name + '  (' + d.mac + ')';
         var pairBtn = document.createElement('button');
         pairBtn.textContent = 'Koppeln & Target erstellen';
         pairBtn.className = 'success';
@@ -1192,13 +666,48 @@ export function mainPageHtml(adminUser: string): string {
       }
     }
 
+    document.getElementById('refresh-setup').onclick = function () {
+      loadSetup().catch(function (error) {
+        setMessage('setup-message', error.message || 'Setup konnte nicht geladen werden', true, false);
+      });
+    };
+
+    document.getElementById('save-config').onclick = function () {
+      saveSetupConfig().catch(function (error) {
+        setMessage('config-message', error.message || 'Fehler beim Speichern', true, false);
+      });
+    };
+
+    document.getElementById('save-admin-password').onclick = function () {
+      saveAdminPassword().catch(function (error) {
+        setMessage('password-message', error.message || 'Fehler beim Speichern', true, false);
+      });
+    };
+
+    document.getElementById('apply-restart').onclick = function () {
+      applyRestart().catch(function (error) {
+        setMessage('setup-message', error.message || 'Neustart fehlgeschlagen', true, false);
+      });
+    };
+
+    document.getElementById('reload-all').onclick = function () {
+      Promise.all([loadSetup(), refreshRuntimeTables()]).catch(function (error) {
+        setMessage('setup-message', error.message || 'Aktualisierung fehlgeschlagen', true, false);
+      });
+    };
+
+    document.getElementById('logout').onclick = async function () {
+      await api('/api/auth/logout', { method: 'POST', body: JSON.stringify({}) });
+      window.location.href = '/login';
+    };
+
     document.getElementById('bt-scan').onclick = function () {
       setMessage('bt-message', 'Scanne... (ca. 8 Sekunden)');
       document.getElementById('bt-devices').innerHTML = '';
       api('/api/bt/scan', { method: 'POST', body: '{}' })
         .then(function (r) { return r.json(); })
         .then(function (b) {
-          renderBtDevices(b.devices || [], false);
+          renderBtDevices(b.devices || []);
           setMessage('bt-message', (b.devices || []).length + ' Geraet(e) gefunden.', false, true);
         })
         .catch(function (e) { setMessage('bt-message', e.message || 'Scan fehlgeschlagen', true, false); });
@@ -1207,7 +716,7 @@ export function mainPageHtml(adminUser: string): string {
     document.getElementById('bt-list').onclick = function () {
       api('/api/bt/devices')
         .then(function (r) { return r.json(); })
-        .then(function (b) { renderBtDevices(b.devices || [], true); setMessage('bt-message', '', false, false); })
+        .then(function (b) { renderBtDevices(b.devices || []); setMessage('bt-message', '', false, false); })
         .catch(function (e) { setMessage('bt-message', e.message || 'Fehler', true, false); });
     };
 

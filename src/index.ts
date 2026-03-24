@@ -6,12 +6,6 @@ import { logger } from "./logger";
 import { createApp } from "./server";
 
 function warnMisconfig(): void {
-  if (config.streamBaseUrl.includes("example.com")) {
-    logger.warn(
-      "AIRBRIDGE_STREAM_BASE_URL enthaelt noch Platzhalter – Playback wird nicht funktionieren. " +
-        "Stream-URL in Web-UI unter System Setup setzen.",
-    );
-  }
   if (config.spawnProcesses) {
     if (config.shairportBin && path.isAbsolute(config.shairportBin)) {
       try {
@@ -26,20 +20,6 @@ function warnMisconfig(): void {
       } catch {
         logger.warn(`ffmpeg nicht gefunden oder nicht ausfuehrbar: ${config.ffmpegBin}`);
       }
-    }
-  }
-  if (config.alexaInvokeMode === "alexa_remote2" && config.alexaCookiePath) {
-    try {
-      const stat = fs.statSync(config.alexaCookiePath);
-      if (stat.size === 0) {
-        logger.warn(
-          "Alexa-Cookie-Datei ist leer – Cookie Wizard in Web-UI starten (System Setup).",
-        );
-      }
-    } catch {
-      logger.warn(
-        `Alexa-Cookie-Datei fehlt: ${config.alexaCookiePath} – Cookie Wizard in Web-UI starten.`,
-      );
     }
   }
 }

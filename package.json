@@ -15,7 +15,6 @@
     "node": ">=22"
   },
   "dependencies": {
-    "alexa-remote2": "^7.0.1",
     "argon2": "^0.41.1",
     "better-sqlite3": "^11.7.0",
     "cookie-parser": "^1.4.7",
