@@ -1,14 +1,14 @@
 restart:
-  name: Restart AirBridge
-  description: Stop and start all AirBridge runtime processes.
+  name: Restart Alexa-Airplay
+  description: Stop and start all Alexa-Airplay runtime processes.
 
 reconnect:
-  name: Reconnect AirBridge target
+  name: Reconnect Alexa-Airplay target
   description: Reconnect all targets or one target by target id.
   fields:
     target_id:
       name: Target ID
-      description: Optional target id from the AirBridge status entity attributes.
+      description: Optional target id from the Alexa-Airplay status entity attributes.
       required: false
       example: "0"
       selector:

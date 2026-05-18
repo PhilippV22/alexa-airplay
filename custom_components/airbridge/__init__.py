@@ -63,4 +63,4 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 def entry_title(data: dict) -> str:
     """Return a stable entry title."""
-    return str(data.get(CONF_NAME) or "AirBridge")
+    return str(data.get(CONF_NAME) or "Alexa-Airplay")

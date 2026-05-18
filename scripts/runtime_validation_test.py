@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pure runtime validation tests for AirBridge."""
+"""Pure runtime validation tests for Alexa-Airplay."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ config = runtime.build_config(
         [
             {
                 "name": "Wohnzimmer Echo",
-                "airplay_name": "AirBridge Wohnzimmer",
+                "airplay_name": "Alexa-Airplay Wohnzimmer",
                 "mac": "aa:bb:cc:dd:ee:ff",
                 "enabled": True,
             }
@@ -45,7 +45,7 @@ assert config.targets[0].raop_port == 5500
 assert config.targets[0].udp_port_base == 20000
 
 rendered = runtime.render_shairport_config(config.targets[0])
-assert 'name = "AirBridge Wohnzimmer";' in rendered
+assert 'name = "Alexa-Airplay Wohnzimmer";' in rendered
 assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' in rendered
 
 empty = runtime.build_config(base_options([]))
@@ -57,7 +57,7 @@ try:
             [
                 {
                     "name": "Bad",
-                    "airplay_name": "AirBridge Bad",
+                    "airplay_name": "Alexa-Airplay Bad",
                     "mac": "not-a-mac",
                     "enabled": True,
                 }
@@ -75,13 +75,13 @@ try:
             [
                 {
                     "name": "One",
-                    "airplay_name": "AirBridge Same",
+                    "airplay_name": "Alexa-Airplay Same",
                     "mac": "AA:BB:CC:DD:EE:01",
                     "enabled": True,
                 },
                 {
                     "name": "Two",
-                    "airplay_name": "AirBridge Same",
+                    "airplay_name": "Alexa-Airplay Same",
                     "mac": "AA:BB:CC:DD:EE:02",
                     "enabled": True,
                 },

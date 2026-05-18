@@ -1,10 +1,10 @@
 {
-  "title": "AirBridge",
+  "title": "Alexa-Airplay",
   "config": {
     "step": {
       "user": {
-        "title": "AirBridge einrichten",
-        "description": "Konfiguriere zuerst die AirBridge-Standardwerte. {error}",
+        "title": "Alexa-Airplay einrichten",
+        "description": "Konfiguriere zuerst die Alexa-Airplay-Standardwerte. {error}",
         "data": {
           "log_level": "Log-Level",
           "adapter": "Bluetooth-Adapter",
@@ -28,14 +28,14 @@
       }
     },
     "error": {
-      "invalid_config": "Ungueltige AirBridge-Konfiguration"
+      "invalid_config": "Ungueltige Alexa-Airplay-Konfiguration"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "AirBridge Optionen",
-        "description": "Aktualisiere die AirBridge Runtime-Konfiguration. Nutze Targets JSON zum Bearbeiten/Entfernen bestehender Ziele, oder aktiviere Weiteres Ziel hinzufuegen fuer den gefuehrten Dialog. {error}",
+        "title": "Alexa-Airplay Optionen",
+        "description": "Aktualisiere die Alexa-Airplay Runtime-Konfiguration. Nutze Targets JSON zum Bearbeiten/Entfernen bestehender Ziele, oder aktiviere Weiteres Ziel hinzufuegen fuer den gefuehrten Dialog. {error}",
         "data": {
           "log_level": "Log-Level",
           "adapter": "Bluetooth-Adapter",
@@ -61,7 +61,7 @@
       }
     },
     "error": {
-      "invalid_config": "Ungueltige AirBridge-Konfiguration"
+      "invalid_config": "Ungueltige Alexa-Airplay-Konfiguration"
     }
   }
 }

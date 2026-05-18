@@ -141,7 +141,7 @@ def _target_schema(devices: dict[str, str]) -> vol.Schema:
     schema[vol.Optional(CONF_KNOWN_DEVICE, default=next(iter(choices)))] = vol.In(choices)
     schema[vol.Optional(CONF_MANUAL_MAC, default="")] = str
     schema[vol.Required(CONF_TARGET_NAME, default="Echo")] = str
-    schema[vol.Required(CONF_AIRPLAY_NAME, default="AirBridge Echo")] = str
+    schema[vol.Required(CONF_AIRPLAY_NAME, default="Alexa-Airplay Echo")] = str
     schema[vol.Optional(CONF_ENABLED, default=True)] = bool
     schema[vol.Optional(CONF_ADD_ANOTHER, default=False)] = bool
     schema[vol.Optional(CONF_FINISH_WITHOUT_TARGET, default=False)] = bool
@@ -276,7 +276,7 @@ class AirBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     return await self.async_step_target()
                 await self.async_set_unique_id(DOMAIN)
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title="AirBridge", data=data)
+                return self.async_create_entry(title="Alexa-Airplay", data=data)
 
         return self.async_show_form(
             step_id="target",

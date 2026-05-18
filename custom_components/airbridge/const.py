@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.const import Platform
 
 DOMAIN = "airbridge"
-NAME = "AirBridge"
+NAME = "Alexa-Airplay"
 
 CONF_LOG_LEVEL = "log_level"
 CONF_ADAPTER = "adapter"

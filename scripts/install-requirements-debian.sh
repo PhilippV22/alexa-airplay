@@ -49,5 +49,5 @@ if (( ${#missing[@]} > 0 )); then
   exit 1
 fi
 
-echo "AirBridge requirements installed successfully."
+echo "Alexa-Airplay requirements installed successfully."
 echo "If Home Assistant runs as a service user, restart Home Assistant or reboot so group changes apply."
