@@ -1,0 +1,32 @@
+configuration:
+  log_level:
+    name: Log level
+    description: Verbosity of add-on logs.
+  adapter:
+    name: Bluetooth adapter
+    description: Bluetooth controller on the Home Assistant host, usually hci0.
+  reconnect_interval_seconds:
+    name: Reconnect interval
+    description: Seconds between Bluetooth and process checks.
+  airplay_port_base:
+    name: AirPlay TCP base port
+    description: First TCP port for AirPlay receivers.
+  udp_port_base:
+    name: AirPlay UDP base port
+    description: First UDP port range for AirPlay receivers.
+  targets:
+    name: Echo targets
+    description: One entry per Echo that should appear as an AirPlay target.
+    fields:
+      name:
+        name: Name
+        description: Internal display name used in logs.
+      airplay_name:
+        name: AirPlay name
+        description: Name shown on iPhone, iPad or Mac.
+      mac:
+        name: Bluetooth MAC
+        description: Bluetooth address of the Echo.
+      enabled:
+        name: Enabled
+        description: Creates and starts this AirPlay receiver.

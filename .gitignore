@@ -1,8 +1,10 @@
-node_modules/
-dist/
-var/
-run/
-.env
-*.log
 .DS_Store
+*.log
+.claude/
+db/
+dist/
+node_modules/
+run/
+tmp/
+var/
 coverage/
