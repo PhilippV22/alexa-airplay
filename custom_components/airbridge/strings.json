@@ -1,0 +1,41 @@
+{
+  "title": "AirBridge",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up AirBridge",
+        "description": "Configure AirPlay receivers for Echo Bluetooth targets. {error}",
+        "data": {
+          "log_level": "Log level",
+          "adapter": "Bluetooth adapter",
+          "reconnect_interval_seconds": "Reconnect interval in seconds",
+          "airplay_port_base": "AirPlay TCP base port",
+          "udp_port_base": "AirPlay UDP base port",
+          "targets_json": "Targets JSON"
+        }
+      }
+    },
+    "error": {
+      "invalid_config": "Invalid AirBridge configuration"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AirBridge options",
+        "description": "Update AirBridge runtime configuration. {error}",
+        "data": {
+          "log_level": "Log level",
+          "adapter": "Bluetooth adapter",
+          "reconnect_interval_seconds": "Reconnect interval in seconds",
+          "airplay_port_base": "AirPlay TCP base port",
+          "udp_port_base": "AirPlay UDP base port",
+          "targets_json": "Targets JSON"
+        }
+      }
+    },
+    "error": {
+      "invalid_config": "Invalid AirBridge configuration"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+restart:
+  name: Restart AirBridge
+  description: Stop and start all AirBridge runtime processes.
+
+reconnect:
+  name: Reconnect AirBridge target
+  description: Reconnect all targets or one target by target id.
+  fields:
+    target_id:
+      name: Target ID
+      description: Optional target id from the AirBridge status entity attributes.
+      required: false
+      example: "0"
+      selector:
+        text:

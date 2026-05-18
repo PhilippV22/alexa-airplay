@@ -1,0 +1,11 @@
+{
+  "domain": "airbridge",
+  "name": "AirBridge",
+  "version": "1.0.0",
+  "documentation": "https://github.com/PhilippV22/alexa-airplay",
+  "issue_tracker": "https://github.com/PhilippV22/alexa-airplay/issues",
+  "codeowners": ["@PhilippV22"],
+  "config_flow": true,
+  "iot_class": "local_push",
+  "requirements": []
+}
