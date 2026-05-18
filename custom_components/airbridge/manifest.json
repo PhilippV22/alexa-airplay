@@ -1,7 +1,7 @@
 {
   "domain": "airbridge",
   "name": "Alexa-Airplay",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "documentation": "https://github.com/PhilippV22/alexa-airplay",
   "issue_tracker": "https://github.com/PhilippV22/alexa-airplay/issues",
   "codeowners": ["@PhilippV22"],

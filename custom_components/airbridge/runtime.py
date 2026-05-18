@@ -17,6 +17,26 @@ LOG_LEVELS = {"trace", "debug", "info", "warning", "error"}
 AIRPLAY_REQUIRED_COMMANDS = ("shairport-sync", "bluealsa")
 DISCOVERY_REQUIRED_COMMANDS = ("avahi-daemon",)
 BLUETOOTH_REQUIRED_COMMANDS = ("bluetoothctl", "bluealsa-aplay")
+ALL_REQUIRED_COMMANDS = (
+    *AIRPLAY_REQUIRED_COMMANDS,
+    *DISCOVERY_REQUIRED_COMMANDS,
+    *BLUETOOTH_REQUIRED_COMMANDS,
+)
+APK_PACKAGES = (
+    "alsa-utils",
+    "avahi",
+    "bluez",
+    "bluez-alsa",
+    "bluez-alsa-utils",
+    "shairport-sync",
+)
+APT_PACKAGES = (
+    "alsa-utils",
+    "avahi-daemon",
+    "bluez",
+    "bluez-alsa-utils",
+    "shairport-sync",
+)
 
 
 class RuntimeConfigError(ValueError):
@@ -188,6 +208,10 @@ class AirBridgeManager:
         self.global_error: str | None = None
         self.dependency_errors: list[str] = []
         self.command_paths: dict[str, str | None] = {}
+        self.auto_install_state = "not_started"
+        self.auto_install_error: str | None = None
+        self.auto_install_output: list[str] = []
+        self._auto_install_attempted = False
         self._listeners: set[Callable[[], None]] = set()
         self._monitor_task: asyncio.Task | None = None
         self._bluealsa_process: asyncio.subprocess.Process | None = None
@@ -264,6 +288,9 @@ class AirBridgeManager:
             "global_error": self.global_error,
             "dependency_errors": self.dependency_errors,
             "command_paths": self.command_paths,
+            "auto_install_state": self.auto_install_state,
+            "auto_install_error": self.auto_install_error,
+            "auto_install_output": self.auto_install_output[-20:],
             "runtime_advice": self.runtime_advice(),
             "targets": {
                 target_id: {
@@ -288,6 +315,18 @@ class AirBridgeManager:
         missing = [cmd for cmd, path in self.command_paths.items() if path is None]
         if not missing:
             return None
+        if self.auto_install_state == "failed" and self.auto_install_error:
+            return (
+                "Automatic package install failed: "
+                f"{self.auto_install_error}. Run the README requirements one-liner "
+                "on the Docker host, then restart Home Assistant."
+            )
+        if self.auto_install_state == "skipped" and self.auto_install_error:
+            return (
+                f"Automatic package install skipped: {self.auto_install_error}. "
+                "Run the README requirements one-liner on the Docker host, then "
+                "restart Home Assistant."
+            )
         return (
             "Missing runtime commands inside Home Assistant: "
             f"{', '.join(missing)}. For Home Assistant Container, run the README "
@@ -323,6 +362,8 @@ class AirBridgeManager:
 
     async def _monitor_once(self) -> None:
         self.dependency_errors = []
+        self._refresh_command_paths()
+        await self._maybe_auto_install_dependencies()
         self._refresh_command_paths()
         await self._ensure_avahi()
         await self._ensure_bluealsa()
@@ -544,12 +585,51 @@ class AirBridgeManager:
             self.dependency_errors.append(message)
 
     def _refresh_command_paths(self) -> None:
-        commands = (
-            *AIRPLAY_REQUIRED_COMMANDS,
-            *DISCOVERY_REQUIRED_COMMANDS,
-            *BLUETOOTH_REQUIRED_COMMANDS,
-        )
-        self.command_paths = {cmd: shutil.which(cmd) for cmd in commands}
+        self.command_paths = {cmd: shutil.which(cmd) for cmd in ALL_REQUIRED_COMMANDS}
+
+    def _missing_commands(self) -> list[str]:
+        return [cmd for cmd in ALL_REQUIRED_COMMANDS if self.command_paths.get(cmd) is None]
+
+    async def _maybe_auto_install_dependencies(self) -> None:
+        missing = self._missing_commands()
+        if not missing or self._auto_install_attempted:
+            return
+
+        self._auto_install_attempted = True
+        if hasattr(os, "geteuid") and os.geteuid() != 0:
+            self.auto_install_state = "skipped"
+            self.auto_install_error = "Home Assistant is not running as root"
+            return
+
+        if shutil.which("apk"):
+            command = ["apk", "add", "--no-cache", *APK_PACKAGES]
+            manager = "apk"
+        elif shutil.which("apt-get"):
+            command = [
+                "sh",
+                "-c",
+                "export DEBIAN_FRONTEND=noninteractive; "
+                "apt-get update && apt-get install -y --no-install-recommends "
+                + " ".join(APT_PACKAGES),
+            ]
+            manager = "apt-get"
+        else:
+            self.auto_install_state = "skipped"
+            self.auto_install_error = "no supported package manager found inside Home Assistant"
+            return
+
+        self.auto_install_state = "running"
+        self.auto_install_error = None
+        return_code, output = await self._run(command, timeout=240, allow_missing=True)
+        self.auto_install_output = output.splitlines()[-20:]
+
+        if return_code != 0:
+            self.auto_install_state = "failed"
+            self.auto_install_error = f"{manager} exited with code {return_code}"
+            return
+
+        self.auto_install_state = "success"
+        self.auto_install_error = None
 
     def _update_global_state(self) -> None:
         missing_airplay = [

@@ -18,8 +18,10 @@ Bluetooth A2DP.
 6. Add the integration from `Settings` -> `Devices & services` -> `Add Integration`.
 
 HACS installs files into `custom_components/airbridge`. It cannot install OS
-packages. The integration therefore expects these commands to already be
-available in the Home Assistant runtime:
+packages through HACS itself. Alexa-Airplay will try a best-effort automatic
+install inside the Home Assistant runtime when it is running as root and finds
+`apk` or `apt-get`. If that is not possible, these commands must be available
+inside the Home Assistant runtime:
 
 - `shairport-sync`
 - `bluealsa`
@@ -88,7 +90,9 @@ and attributes.
 
 If no AirPlay receiver appears on iPhone or Mac, check the `Runtime` sensor
 attributes first. `shairport-sync` and `avahi-daemon` must be present inside
-the Home Assistant runtime, not only on the Docker host.
+the Home Assistant runtime, not only on the Docker host. The attributes
+`auto_install_state`, `auto_install_error` and `auto_install_output` show
+whether Alexa-Airplay could install missing packages automatically.
 
 If you only see an old AirPlay receiver named `server`, that is usually the
 package default `shairport-sync` service on the host. Re-run the requirements
