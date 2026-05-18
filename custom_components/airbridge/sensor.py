@@ -45,6 +45,8 @@ class AirBridgeRuntimeSensor(SensorEntity):
         return {
             "global_error": self._manager.global_error,
             "dependency_errors": self._manager.dependency_errors,
+            "command_paths": self._manager.command_paths,
+            "runtime_advice": self._manager.runtime_advice(),
             "target_count": len(self._manager.target_ids),
         }
 

@@ -27,17 +27,28 @@ available in the Home Assistant runtime:
 - `bluetoothctl`
 - optional: `avahi-daemon` for AirPlay discovery
 
-### Debian/Ubuntu requirements one-liner
+### Requirements one-liner
 
-For Home Assistant Core running directly on Debian, Ubuntu or Raspberry Pi OS:
+Run this on the Home Assistant host:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PhilippV22/alexa-airplay/main/scripts/install-requirements-debian.sh | sudo bash
 ```
 
 This installs `shairport-sync`, BlueZ, BlueALSA, Avahi, ALSA utilities and D-Bus,
-then enables the relevant systemd services. Home Assistant OS and stock
-Home Assistant Container do not expose a normal host package manager to HACS.
+then enables the relevant systemd services.
+
+For Home Assistant Container, the same one-liner also tries to detect the
+running Home Assistant container and install the missing commands inside it.
+If your container has a custom name, pass it explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PhilippV22/alexa-airplay/main/scripts/install-requirements-debian.sh | sudo AIRBRIDGE_HA_CONTAINER=homeassistant bash
+```
+
+AirPlay discovery needs the Home Assistant container to use host networking.
+Bluetooth control also needs the host D-Bus socket mounted into the container,
+usually `/run/dbus:/run/dbus:ro`.
 
 ## Configure
 
@@ -74,6 +85,10 @@ and uses `bluetoothctl` to pair, trust and reconnect the Echo.
 If the Home Assistant runtime cannot access Bluetooth, D-Bus or the required
 commands, the integration still loads and exposes the problem as entity state
 and attributes.
+
+If no AirPlay receiver appears on iPhone or Mac, check the `Runtime` sensor
+attributes first. `shairport-sync` and `avahi-daemon` must be present inside
+the Home Assistant runtime, not only on the Docker host.
 
 ## Validate Locally
 

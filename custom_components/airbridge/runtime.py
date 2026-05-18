@@ -14,6 +14,9 @@ from typing import Any, Callable
 
 MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
 LOG_LEVELS = {"trace", "debug", "info", "warning", "error"}
+AIRPLAY_REQUIRED_COMMANDS = ("shairport-sync", "bluealsa")
+DISCOVERY_REQUIRED_COMMANDS = ("avahi-daemon",)
+BLUETOOTH_REQUIRED_COMMANDS = ("bluetoothctl", "bluealsa-aplay")
 
 
 class RuntimeConfigError(ValueError):
@@ -183,6 +186,7 @@ class AirBridgeManager:
         self.global_state = "starting"
         self.global_error: str | None = None
         self.dependency_errors: list[str] = []
+        self.command_paths: dict[str, str | None] = {}
         self._listeners: set[Callable[[], None]] = set()
         self._monitor_task: asyncio.Task | None = None
         self._bluealsa_process: asyncio.subprocess.Process | None = None
@@ -252,6 +256,8 @@ class AirBridgeManager:
             "global_state": self.global_state,
             "global_error": self.global_error,
             "dependency_errors": self.dependency_errors,
+            "command_paths": self.command_paths,
+            "runtime_advice": self.runtime_advice(),
             "targets": {
                 target_id: {
                     "state": status.state,
@@ -268,6 +274,17 @@ class AirBridgeManager:
     def _notify(self) -> None:
         for listener in list(self._listeners):
             listener()
+
+    def runtime_advice(self) -> str | None:
+        """Return a concise user-facing runtime hint."""
+        missing = [cmd for cmd, path in self.command_paths.items() if path is None]
+        if not missing:
+            return None
+        return (
+            "Missing runtime commands inside Home Assistant: "
+            f"{', '.join(missing)}. For Home Assistant Container, run the README "
+            "requirements one-liner on the Docker host and restart the container."
+        )
 
     def _write_configs(self) -> None:
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -297,6 +314,8 @@ class AirBridgeManager:
             await asyncio.sleep(self.config.reconnect_interval_seconds)
 
     async def _monitor_once(self) -> None:
+        self.dependency_errors = []
+        self._refresh_command_paths()
         await self._ensure_avahi()
         await self._ensure_bluealsa()
         await self._prepare_adapter()
@@ -309,14 +328,14 @@ class AirBridgeManager:
 
         for target in enabled_targets:
             await self._ensure_shairport(target)
-            await self._connect_target(target)
+            if self._target_statuses[target.id].airplay_ready:
+                await self._connect_target(target)
 
-        self.global_state = "running"
-        self.global_error = None
+        self._update_global_state()
         self._notify()
 
     async def _ensure_avahi(self) -> None:
-        if not shutil.which("avahi-daemon"):
+        if not self.command_paths.get("avahi-daemon"):
             self._record_dependency_error("avahi-daemon not found; AirPlay discovery may fail")
             return
         result = await self._run(["avahi-daemon", "--check"], timeout=5)
@@ -331,7 +350,7 @@ class AirBridgeManager:
     async def _ensure_bluealsa(self) -> None:
         if self._bluealsa_process and self._bluealsa_process.returncode is None:
             return
-        if not shutil.which("bluealsa"):
+        if not self.command_paths.get("bluealsa"):
             self._record_dependency_error("bluealsa not found; Bluetooth audio output cannot start")
             return
         self._bluealsa_process = await asyncio.create_subprocess_exec(
@@ -345,7 +364,7 @@ class AirBridgeManager:
         if not self._dbus_available():
             self._record_dependency_error("system D-Bus socket not available; Bluetooth cannot be controlled")
             return
-        if not shutil.which("bluetoothctl"):
+        if not self.command_paths.get("bluetoothctl"):
             self._record_dependency_error("bluetoothctl not found; Bluetooth cannot be controlled")
             return
         await self._bluetooth_batch(
@@ -364,7 +383,7 @@ class AirBridgeManager:
         if process and process.returncode is None:
             status.update(airplay_ready=True, shairport_pid=process.pid)
             return
-        if not shutil.which("shairport-sync"):
+        if not self.command_paths.get("shairport-sync"):
             status.update(
                 state="error",
                 airplay_ready=False,
@@ -400,7 +419,7 @@ class AirBridgeManager:
 
     async def _connect_target(self, target: Target) -> None:
         status = self._target_statuses[target.id]
-        if not self._dbus_available() or not shutil.which("bluetoothctl"):
+        if not self._dbus_available() or not self.command_paths.get("bluetoothctl"):
             status.update(connected=False, last_error="Bluetooth control is unavailable")
             return
 
@@ -489,6 +508,50 @@ class AirBridgeManager:
     def _record_dependency_error(self, message: str) -> None:
         if message not in self.dependency_errors:
             self.dependency_errors.append(message)
+
+    def _refresh_command_paths(self) -> None:
+        commands = (
+            *AIRPLAY_REQUIRED_COMMANDS,
+            *DISCOVERY_REQUIRED_COMMANDS,
+            *BLUETOOTH_REQUIRED_COMMANDS,
+        )
+        self.command_paths = {cmd: shutil.which(cmd) for cmd in commands}
+
+    def _update_global_state(self) -> None:
+        missing_airplay = [
+            cmd for cmd in AIRPLAY_REQUIRED_COMMANDS if self.command_paths.get(cmd) is None
+        ]
+        if missing_airplay:
+            self.global_state = "error"
+            self.global_error = (
+                "Missing AirPlay runtime command(s): " + ", ".join(missing_airplay)
+            )
+            return
+
+        missing_discovery = [
+            cmd for cmd in DISCOVERY_REQUIRED_COMMANDS if self.command_paths.get(cmd) is None
+        ]
+        if missing_discovery:
+            self.global_state = "warning"
+            self.global_error = (
+                "Missing discovery command(s): "
+                + ", ".join(missing_discovery)
+                + "; AirPlay receivers may not appear on iPhone/Mac"
+            )
+            return
+
+        warning_targets = [
+            status.target.airplay_name
+            for status in self._target_statuses.values()
+            if status.target.enabled and status.state in {"warning", "error"}
+        ]
+        if warning_targets:
+            self.global_state = "warning"
+            self.global_error = "Targets need attention: " + ", ".join(warning_targets)
+            return
+
+        self.global_state = "running"
+        self.global_error = None
 
     @staticmethod
     def _dbus_available() -> bool:
