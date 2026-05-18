@@ -4,14 +4,26 @@
     "step": {
       "user": {
         "title": "AirBridge einrichten",
-        "description": "Konfiguriere AirPlay-Empfaenger fuer Echo-Bluetooth-Ziele. {error}",
+        "description": "Konfiguriere zuerst die AirBridge-Standardwerte. {error}",
         "data": {
           "log_level": "Log-Level",
           "adapter": "Bluetooth-Adapter",
           "reconnect_interval_seconds": "Reconnect-Intervall in Sekunden",
           "airplay_port_base": "AirPlay TCP Startport",
-          "udp_port_base": "AirPlay UDP Startport",
-          "targets_json": "Targets JSON"
+          "udp_port_base": "AirPlay UDP Startport"
+        }
+      },
+      "target": {
+        "title": "Echo-Ziel hinzufuegen",
+        "description": "Waehle ein bekanntes Bluetooth-Geraet oder trage die Echo-Bluetooth-MAC manuell ein. Setze den Echo vor dem Abschluss in den Pairing-Modus. {error}",
+        "data": {
+          "known_device": "Bekanntes Bluetooth-Geraet",
+          "manual_mac": "Bluetooth-MAC manuell",
+          "target_name": "Zielname",
+          "airplay_name": "AirPlay-Name",
+          "enabled": "Aktiviert",
+          "add_another": "Weiteres Ziel hinzufuegen",
+          "finish_without_target": "Ohne Ziel abschliessen"
         }
       }
     },
@@ -23,14 +35,28 @@
     "step": {
       "init": {
         "title": "AirBridge Optionen",
-        "description": "Aktualisiere die AirBridge Runtime-Konfiguration. {error}",
+        "description": "Aktualisiere die AirBridge Runtime-Konfiguration. Nutze Targets JSON zum Bearbeiten/Entfernen bestehender Ziele, oder aktiviere Weiteres Ziel hinzufuegen fuer den gefuehrten Dialog. {error}",
         "data": {
           "log_level": "Log-Level",
           "adapter": "Bluetooth-Adapter",
           "reconnect_interval_seconds": "Reconnect-Intervall in Sekunden",
           "airplay_port_base": "AirPlay TCP Startport",
           "udp_port_base": "AirPlay UDP Startport",
-          "targets_json": "Targets JSON"
+          "targets_json": "Targets JSON",
+          "add_another": "Weiteres Ziel hinzufuegen"
+        }
+      },
+      "target": {
+        "title": "Echo-Ziel hinzufuegen",
+        "description": "Waehle ein bekanntes Bluetooth-Geraet oder trage die Echo-Bluetooth-MAC manuell ein. {error}",
+        "data": {
+          "known_device": "Bekanntes Bluetooth-Geraet",
+          "manual_mac": "Bluetooth-MAC manuell",
+          "target_name": "Zielname",
+          "airplay_name": "AirPlay-Name",
+          "enabled": "Aktiviert",
+          "add_another": "Weiteres Ziel hinzufuegen",
+          "finish_without_target": "Ohne Ziel abschliessen"
         }
       }
     },

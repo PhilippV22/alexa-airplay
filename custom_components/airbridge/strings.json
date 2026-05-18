@@ -4,14 +4,26 @@
     "step": {
       "user": {
         "title": "Set up AirBridge",
-        "description": "Configure AirPlay receivers for Echo Bluetooth targets. {error}",
+        "description": "Configure the AirBridge runtime defaults first. {error}",
         "data": {
           "log_level": "Log level",
           "adapter": "Bluetooth adapter",
           "reconnect_interval_seconds": "Reconnect interval in seconds",
           "airplay_port_base": "AirPlay TCP base port",
-          "udp_port_base": "AirPlay UDP base port",
-          "targets_json": "Targets JSON"
+          "udp_port_base": "AirPlay UDP base port"
+        }
+      },
+      "target": {
+        "title": "Add Echo target",
+        "description": "Choose a known Bluetooth device or enter the Echo Bluetooth MAC manually. Put the Echo in pairing mode before finishing. {error}",
+        "data": {
+          "known_device": "Known Bluetooth device",
+          "manual_mac": "Manual Bluetooth MAC",
+          "target_name": "Target name",
+          "airplay_name": "AirPlay name",
+          "enabled": "Enabled",
+          "add_another": "Add another target",
+          "finish_without_target": "Finish without adding a target"
         }
       }
     },
@@ -23,14 +35,28 @@
     "step": {
       "init": {
         "title": "AirBridge options",
-        "description": "Update AirBridge runtime configuration. {error}",
+        "description": "Update AirBridge runtime configuration. Use Targets JSON for editing/removing existing targets, or enable Add another target for the guided target form. {error}",
         "data": {
           "log_level": "Log level",
           "adapter": "Bluetooth adapter",
           "reconnect_interval_seconds": "Reconnect interval in seconds",
           "airplay_port_base": "AirPlay TCP base port",
           "udp_port_base": "AirPlay UDP base port",
-          "targets_json": "Targets JSON"
+          "targets_json": "Targets JSON",
+          "add_another": "Add another target"
+        }
+      },
+      "target": {
+        "title": "Add Echo target",
+        "description": "Choose a known Bluetooth device or enter the Echo Bluetooth MAC manually. {error}",
+        "data": {
+          "known_device": "Known Bluetooth device",
+          "manual_mac": "Manual Bluetooth MAC",
+          "target_name": "Target name",
+          "airplay_name": "AirPlay name",
+          "enabled": "Enabled",
+          "add_another": "Add another target",
+          "finish_without_target": "Finish without adding a target"
         }
       }
     },

@@ -1,5 +1,9 @@
 # AirBridge
 
+<p align="center">
+  <img src="custom_components/airbridge/brand/logo.png" alt="AirBridge logo" width="320">
+</p>
+
 AirBridge is a HACS-installable Home Assistant custom integration that starts
 one AirPlay receiver per configured Echo and forwards audio to that Echo over
 Bluetooth A2DP.
@@ -23,9 +27,29 @@ available in the Home Assistant runtime:
 - `bluetoothctl`
 - optional: `avahi-daemon` for AirPlay discovery
 
+### Debian/Ubuntu requirements one-liner
+
+For Home Assistant Core running directly on Debian, Ubuntu or Raspberry Pi OS:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PhilippV22/alexa-airplay/main/scripts/install-requirements-debian.sh | sudo bash
+```
+
+This installs `shairport-sync`, BlueZ, BlueALSA, Avahi, ALSA utilities and D-Bus,
+then enables the relevant systemd services. Home Assistant OS and stock
+Home Assistant Container do not expose a normal host package manager to HACS.
+
 ## Configure
 
-The setup flow asks for a JSON target list:
+The setup flow is guided:
+
+1. Set runtime defaults like Bluetooth adapter and AirPlay base ports.
+2. Put the Echo in Bluetooth pairing mode.
+3. Add an Echo target by choosing a detected Bluetooth device from the dropdown, or paste the Echo Bluetooth MAC manually.
+4. Set the AirPlay name that should appear on iPhone, iPad or Mac.
+5. Optionally add more targets.
+
+Advanced editing is still available in the integration options as Targets JSON:
 
 ```json
 [
