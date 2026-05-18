@@ -62,6 +62,7 @@ class TargetRuntimeStatus:
     airplay_ready: bool = False
     shairport_pid: int | None = None
     last_error: str | None = None
+    recent_output: list[str] = field(default_factory=list)
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def update(self, **changes: object) -> None:
@@ -191,6 +192,7 @@ class AirBridgeManager:
         self._monitor_task: asyncio.Task | None = None
         self._bluealsa_process: asyncio.subprocess.Process | None = None
         self._shairport_processes: dict[str, asyncio.subprocess.Process] = {}
+        self._shairport_log_tasks: dict[str, asyncio.Task] = {}
         self._target_statuses = {
             target.id: TargetRuntimeStatus(
                 target=target,
@@ -246,6 +248,11 @@ class AirBridgeManager:
         for process in list(self._shairport_processes.values()):
             await self._stop_process(process)
         self._shairport_processes.clear()
+        for task in list(self._shairport_log_tasks.values()):
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        self._shairport_log_tasks.clear()
 
         if self._bluealsa_process:
             await self._stop_process(self._bluealsa_process)
@@ -265,6 +272,7 @@ class AirBridgeManager:
                     "airplay_ready": status.airplay_ready,
                     "shairport_pid": status.shairport_pid,
                     "last_error": status.last_error,
+                    "recent_output": status.recent_output[-10:],
                     "updated_at": status.updated_at,
                 }
                 for target_id, status in self._target_statuses.items()
@@ -397,10 +405,14 @@ class AirBridgeManager:
             "shairport-sync",
             "-c",
             str(self._config_path(target)),
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
         )
         self._shairport_processes[target.id] = process
+        if process.stdout is not None:
+            self._shairport_log_tasks[target.id] = asyncio.create_task(
+                self._capture_shairport_output(target.id, process.stdout)
+            )
         await asyncio.sleep(1)
         if process.returncode is None:
             status.update(
@@ -414,7 +426,10 @@ class AirBridgeManager:
                 state="error",
                 airplay_ready=False,
                 shairport_pid=None,
-                last_error="shairport-sync exited immediately",
+                last_error=(
+                    "shairport-sync exited immediately"
+                    + self._format_recent_output_hint(status.recent_output)
+                ),
             )
 
     async def _connect_target(self, target: Target) -> None:
@@ -504,6 +519,25 @@ class AirBridgeManager:
         except TimeoutError:
             process.kill()
             await process.wait()
+
+    async def _capture_shairport_output(
+        self,
+        target_id: str,
+        stream: asyncio.StreamReader,
+    ) -> None:
+        status = self._target_statuses[target_id]
+        while line := await stream.readline():
+            text = line.decode(errors="replace").strip()
+            if not text:
+                continue
+            status.recent_output.append(text[-800:])
+            del status.recent_output[:-20]
+
+    @staticmethod
+    def _format_recent_output_hint(lines: list[str]) -> str:
+        if not lines:
+            return ""
+        return ": " + " | ".join(lines[-4:])
 
     def _record_dependency_error(self, message: str) -> None:
         if message not in self.dependency_errors:

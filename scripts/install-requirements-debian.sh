@@ -37,11 +37,33 @@ install_host_packages() {
     systemctl enable --now bluetooth.service || true
     systemctl enable --now avahi-daemon.service || true
     systemctl enable --now bluealsa.service || true
+    disable_default_shairport_service
   fi
 
   for user in homeassistant hass hassio; do
     if id "$user" >/dev/null 2>&1; then
       usermod -aG bluetooth,audio "$user" || true
+    fi
+  done
+}
+
+disable_default_shairport_service() {
+  if ! command -v systemctl >/dev/null 2>&1 || [[ ! -d /run/systemd/system ]]; then
+    return 0
+  fi
+
+  # The package default service advertises the host name, often "server", as an
+  # AirPlay receiver. Alexa-Airplay starts its own shairport-sync instances with
+  # per-target names, so the default service only creates confusion and can hold
+  # RAOP/mDNS resources.
+  local units=(
+    shairport-sync.service
+    shairport-sync@.service
+  )
+  local unit
+  for unit in "${units[@]}"; do
+    if systemctl list-unit-files "$unit" >/dev/null 2>&1; then
+      systemctl disable --now "$unit" >/dev/null 2>&1 || true
     fi
   done
 }
@@ -107,6 +129,8 @@ if [ -n "$missing" ]; then
   exit 1
 fi
 SH
+
+  docker exec "$container" sh -c 'pkill -f "^shairport-sync( |$)" 2>/dev/null || true' || true
 
   local network_mode
   network_mode="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$container" 2>/dev/null || true)"

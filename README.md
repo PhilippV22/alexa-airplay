@@ -90,6 +90,11 @@ If no AirPlay receiver appears on iPhone or Mac, check the `Runtime` sensor
 attributes first. `shairport-sync` and `avahi-daemon` must be present inside
 the Home Assistant runtime, not only on the Docker host.
 
+If you only see an old AirPlay receiver named `server`, that is usually the
+package default `shairport-sync` service on the host. Re-run the requirements
+one-liner; it disables that default service so only the Alexa-Airplay target
+names are advertised.
+
 ## Validate Locally
 
 ```bash
