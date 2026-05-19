@@ -82,6 +82,7 @@ class AirBridgeTargetStatusSensor(SensorEntity):
             "mac": status.target.mac,
             "enabled": status.target.enabled,
             "connected": status.connected,
+            "bluealsa_ready": status.bluealsa_ready,
             "airplay_ready": status.airplay_ready,
             "shairport_pid": status.shairport_pid,
             "last_message": status.last_message,

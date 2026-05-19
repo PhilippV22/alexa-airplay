@@ -50,6 +50,7 @@ class AirBridgeTargetConnectedBinarySensor(BinarySensorEntity):
         return {
             "mac": status.target.mac,
             "state": status.state,
+            "bluealsa_ready": status.bluealsa_ready,
             "last_message": status.last_message,
             "last_error": status.last_error,
         }

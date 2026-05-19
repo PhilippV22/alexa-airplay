@@ -25,6 +25,7 @@ BLUEALSA_PCM_MISSING_MARKERS = (
     "couldn't get bluealsa pcm",
     "pcm not found",
     "output_device_error_19",
+    "bluealsa a2dp audio device is not ready",
 )
 AIRPLAY_REQUIRED_COMMANDS = ("shairport-sync", "bluealsa")
 DISCOVERY_REQUIRED_COMMANDS = ("avahi-daemon",)
@@ -68,6 +69,7 @@ class Target:
     airplay_name: str
     mac: str
     enabled: bool
+    adapter: str
     raop_port: int
     udp_port_base: int
 
@@ -91,6 +93,7 @@ class TargetRuntimeStatus:
     target: Target
     state: str = "disabled"
     connected: bool = False
+    bluealsa_ready: bool = False
     airplay_ready: bool = False
     shairport_pid: int | None = None
     last_message: str | None = None
@@ -183,6 +186,7 @@ def build_config(options: dict[str, Any]) -> AirBridgeConfig:
                 airplay_name=airplay_name,
                 mac=mac,
                 enabled=enabled,
+                adapter=adapter,
                 raop_port=raop_port,
                 udp_port_base=target_udp_base,
             )
@@ -203,6 +207,11 @@ def escape_shairport_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def bluealsa_device(target: Target) -> str:
+    """Return the ALSA device string for a target."""
+    return f"bluealsa:DEV={target.mac},PROFILE=a2dp,HCI={target.adapter}"
+
+
 def render_shairport_config(target: Target) -> str:
     """Render shairport-sync config for one target."""
     return (
@@ -214,7 +223,7 @@ def render_shairport_config(target: Target) -> str:
         "  udp_port_range = 10;\n"
         "};\n\n"
         "alsa = {\n"
-        f'  output_device = "bluealsa:DEV={target.mac}";\n'
+        f'  output_device = "{bluealsa_device(target)}";\n'
         '  mixer_control_name = "";\n'
         "};\n\n"
         "metadata = {\n"
@@ -372,6 +381,7 @@ class AirBridgeManager:
                 target_id: {
                     "state": status.state,
                     "connected": status.connected,
+                    "bluealsa_ready": status.bluealsa_ready,
                     "airplay_ready": status.airplay_ready,
                     "shairport_pid": status.shairport_pid,
                     "last_message": status.last_message,
@@ -417,7 +427,7 @@ class AirBridgeManager:
     @staticmethod
     def _target_runtime_advice(status: TargetRuntimeStatus) -> str | None:
         """Return a concise hint for a target-level runtime problem."""
-        if not status.target.enabled or status.connected:
+        if not status.target.enabled:
             return None
 
         output = "\n".join([status.last_error or "", *status.recent_output]).lower()
@@ -429,12 +439,21 @@ class AirBridgeManager:
                 "button, put the Echo in Bluetooth pairing mode, then press the "
                 "Bluetooth pair button."
             )
+        if status.connected and not status.bluealsa_ready:
+            return (
+                f"{status.target.airplay_name}: Bluetooth is connected, but BlueALSA "
+                "does not expose an A2DP audio output for this Echo yet. Press "
+                "Bluetooth reconnect; if it still stays this way, press Bluetooth "
+                "forget, put the Echo in pairing mode, then press Bluetooth pair."
+            )
         if any(marker in output for marker in BLUEALSA_PCM_MISSING_MARKERS):
             return (
                 f"{status.target.airplay_name}: AirPlay is visible, but BlueALSA "
                 "does not have a Bluetooth audio device for this Echo yet. Connect "
                 "the Echo over Bluetooth first, then try AirPlay again."
             )
+        if status.connected and status.bluealsa_ready:
+            return None
         if status.state == "warning":
             return (
                 f"{status.target.airplay_name}: Bluetooth is not connected. Put the "
@@ -489,9 +508,12 @@ class AirBridgeManager:
             return
 
         for target in enabled_targets:
-            await self._ensure_shairport(target)
-            if self._target_statuses[target.id].airplay_ready:
-                await self._connect_target(target)
+            await self._connect_target(target)
+            status = self._target_statuses[target.id]
+            if status.connected and status.bluealsa_ready:
+                await self._ensure_shairport(target)
+            else:
+                await self._stop_shairport(target)
 
         self._update_global_state()
         self._notify()
@@ -521,6 +543,13 @@ class AirBridgeManager:
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
+        await asyncio.sleep(0.5)
+        if self._bluealsa_process.returncode is not None:
+            self._bluealsa_process = None
+            if not await self._bluealsa_service_available():
+                self._record_dependency_error(
+                    "bluealsa exited immediately; Bluetooth audio output cannot start"
+                )
 
     async def _prepare_adapter(self) -> None:
         if not self._dbus_available():
@@ -542,6 +571,15 @@ class AirBridgeManager:
     async def _ensure_shairport(self, target: Target) -> None:
         process = self._shairport_processes.get(target.id)
         status = self._target_statuses[target.id]
+        if not status.connected or not status.bluealsa_ready:
+            await self._stop_shairport(target)
+            status.update(
+                state="warning",
+                airplay_ready=False,
+                shairport_pid=None,
+                last_error="BlueALSA A2DP audio device is not ready",
+            )
+            return
         if process and process.returncode is None:
             status.update(airplay_ready=True, shairport_pid=process.pid)
             return
@@ -591,6 +629,20 @@ class AirBridgeManager:
                 ),
             )
 
+    async def _stop_shairport(self, target: Target) -> None:
+        process = self._shairport_processes.pop(target.id, None)
+        if process is not None:
+            await self._stop_process(process)
+        task = self._shairport_log_tasks.pop(target.id, None)
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        self._target_statuses[target.id].update(
+            airplay_ready=False,
+            shairport_pid=None,
+        )
+
     def _enabled_targets_for_action(self, target_id: str | None) -> list[Target]:
         targets = [
             target
@@ -616,6 +668,7 @@ class AirBridgeManager:
             for target in targets:
                 self._target_statuses[target.id].update(
                     connected=False,
+                    bluealsa_ready=False,
                     state="warning",
                     last_message=None,
                     last_error=message,
@@ -631,6 +684,7 @@ class AirBridgeManager:
             for target in targets:
                 self._target_statuses[target.id].update(
                     connected=False,
+                    bluealsa_ready=False,
                     state="warning",
                     last_message=None,
                     last_error=message,
@@ -649,19 +703,27 @@ class AirBridgeManager:
         except (CommandUnavailableError, OSError, TimeoutError) as err:
             self._target_statuses[target.id].update(
                 connected=False,
+                bluealsa_ready=False,
                 state="warning",
                 last_message=None,
                 last_error=f"{action_name} failed: {err}",
             )
 
     async def _reconnect_target(self, target: Target) -> None:
-        await self._ensure_shairport(target)
         await self._connect_target(target)
+        if self._target_statuses[target.id].bluealsa_ready:
+            await self._ensure_shairport(target)
+        else:
+            await self._stop_shairport(target)
 
     async def _connect_target(self, target: Target) -> None:
         status = self._target_statuses[target.id]
         if not self._dbus_available() or not self.command_paths.get("bluetoothctl"):
-            status.update(connected=False, last_error="Bluetooth control is unavailable")
+            status.update(
+                connected=False,
+                bluealsa_ready=False,
+                last_error="Bluetooth control is unavailable",
+            )
             return
 
         info = await self._bluetooth_info(target.mac)
@@ -671,6 +733,7 @@ class AirBridgeManager:
             if "Paired: yes" not in info:
                 status.update(
                     connected=False,
+                    bluealsa_ready=False,
                     state="warning",
                     last_message=None,
                     last_error=(
@@ -684,14 +747,7 @@ class AirBridgeManager:
         await self._bluetooth_batch([f"trust {target.mac}"], timeout=10)
         info = await self._bluetooth_info(target.mac)
         if "Connected: yes" in info:
-            updates: dict[str, object] = {
-                "connected": True,
-                "state": "running" if status.airplay_ready else "warning",
-                "last_message": "Bluetooth connected",
-            }
-            if status.airplay_ready:
-                updates["last_error"] = None
-            status.update(**updates)
+            await self._mark_target_connected(target)
             return
 
         result = await self._run(["bluetoothctl", "connect", target.mac], timeout=20)
@@ -702,19 +758,13 @@ class AirBridgeManager:
             or "AlreadyConnected" in output
             or "Already connected" in output
         ):
-            updates = {
-                "connected": True,
-                "state": "running" if status.airplay_ready else "warning",
-                "last_message": "Bluetooth connected",
-            }
-            if status.airplay_ready:
-                updates["last_error"] = None
-            status.update(**updates)
+            await self._mark_target_connected(target)
             return
 
         if "br-connection-busy" in output:
             status.update(
                 connected=True,
+                bluealsa_ready=False,
                 state="warning",
                 last_message="Bluetooth may already be connected",
                 last_error="Bluetooth busy; device may already be connected",
@@ -723,16 +773,79 @@ class AirBridgeManager:
 
         status.update(
             connected=False,
+            bluealsa_ready=False,
             state="warning",
             last_message=None,
             last_error=output.strip() or "Bluetooth connect failed",
         )
+
+    async def _mark_target_connected(self, target: Target) -> None:
+        status = self._target_statuses[target.id]
+        status.update(
+            connected=True,
+            bluealsa_ready=False,
+            state="warning",
+            last_message="Bluetooth connected; waiting for BlueALSA audio",
+            last_error=None,
+        )
+        bluealsa_ready = await self._wait_for_bluealsa_pcm(target)
+        if not bluealsa_ready:
+            status.update(
+                connected=True,
+                bluealsa_ready=False,
+                state="warning",
+                last_message="Bluetooth connected",
+                last_error=(
+                    "BlueALSA A2DP audio device is not ready. The Echo is connected "
+                    "over Bluetooth, but no A2DP PCM is available for AirPlay audio."
+                ),
+            )
+            return
+
+        status.update(
+            connected=True,
+            bluealsa_ready=True,
+            state="running" if status.airplay_ready else "warning",
+            last_message="Bluetooth audio ready",
+            last_error=None,
+        )
+
+    async def _wait_for_bluealsa_pcm(self, target: Target) -> bool:
+        for _ in range(8):
+            if await self._bluealsa_pcm_available(target):
+                return True
+            await asyncio.sleep(1)
+        return False
+
+    async def _bluealsa_pcm_available(self, target: Target) -> bool:
+        if not self.command_paths.get("bluealsa-aplay") and not shutil.which("bluealsa-aplay"):
+            return False
+        result = await self._run(
+            ["bluealsa-aplay", "--list-pcms"],
+            timeout=10,
+            allow_missing=True,
+        )
+        if result[0] != 0:
+            return False
+        output = result[1].upper()
+        return target.mac in output and "PROFILE=A2DP" in output
+
+    async def _bluealsa_service_available(self) -> bool:
+        if not self.command_paths.get("bluealsa-aplay") and not shutil.which("bluealsa-aplay"):
+            return False
+        result = await self._run(
+            ["bluealsa-aplay", "--list-pcms"],
+            timeout=10,
+            allow_missing=True,
+        )
+        return result[0] == 0
 
     async def _pair_target(self, target: Target) -> None:
         status = self._target_statuses[target.id]
         status.update(
             state="pairing",
             connected=False,
+            bluealsa_ready=False,
             last_message="Pairing Bluetooth target",
             last_error=None,
         )
@@ -743,6 +856,7 @@ class AirBridgeManager:
         if "Paired: yes" not in info:
             status.update(
                 connected=False,
+                bluealsa_ready=False,
                 state="warning",
                 last_message=None,
                 last_error=(
@@ -760,13 +874,17 @@ class AirBridgeManager:
             last_error=None,
         )
         await self._connect_target(target)
-        await self._ensure_shairport(target)
+        if status.bluealsa_ready:
+            await self._ensure_shairport(target)
+        else:
+            await self._stop_shairport(target)
 
     async def _forget_target(self, target: Target) -> None:
         status = self._target_statuses[target.id]
         status.update(
             state="forgetting",
             connected=False,
+            bluealsa_ready=False,
             last_message="Removing Bluetooth pairing",
             last_error=None,
         )
@@ -786,6 +904,7 @@ class AirBridgeManager:
         if "Paired: yes" in info or "Connected: yes" in info:
             status.update(
                 connected=False,
+                bluealsa_ready=False,
                 state="warning",
                 last_message=None,
                 last_error=(
@@ -797,6 +916,7 @@ class AirBridgeManager:
 
         status.update(
             connected=False,
+            bluealsa_ready=False,
             state="configured",
             last_message=(
                 "Bluetooth pairing removed. Put the Echo in pairing mode, then "
@@ -872,6 +992,18 @@ class AirBridgeManager:
                 continue
             status.recent_output.append(text[-800:])
             del status.recent_output[:-20]
+            if any(marker in text.lower() for marker in BLUEALSA_PCM_MISSING_MARKERS):
+                status.update(
+                    bluealsa_ready=False,
+                    last_message=None,
+                    last_error="BlueALSA A2DP audio device is not ready",
+                )
+        status.update(
+            airplay_ready=False,
+            shairport_pid=None,
+            state="warning" if status.target.enabled else "disabled",
+        )
+        self._notify()
 
     @staticmethod
     def _format_recent_output_hint(lines: list[str]) -> str:

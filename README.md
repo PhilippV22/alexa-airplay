@@ -100,6 +100,12 @@ open the Alexa-Airplay device in Home Assistant, press `Bluetooth forget`, put
 the Echo in Bluetooth pairing mode, then press `Bluetooth pair`. If the Echo was
 previously paired with a phone or computer, remove that old pairing there too.
 
+The target status sensor distinguishes plain Bluetooth from the usable audio
+path: `connected` means BlueZ is connected to the Echo, while `bluealsa_ready`
+means BlueALSA exposes the A2DP audio output that AirPlay needs. Alexa-Airplay
+only keeps the AirPlay receiver active once both are true, so an Echo should no
+longer stay visible in AirPlay while its Bluetooth audio path is not ready.
+
 ## How it works
 
 For every enabled target, Alexa-Airplay writes a `shairport-sync` config under
