@@ -20,6 +20,10 @@ BLUETOOTH_REFUSED_MARKERS = (
     "status 0x0b",
     "rejected",
 )
+BLUETOOTH_PAIRING_FAILED_MARKERS = (
+    "bluetooth pairing failed",
+    "failed to pair",
+)
 BLUEALSA_PCM_MISSING_MARKERS = (
     "no such bluealsa audio device",
     "couldn't get bluealsa pcm",
@@ -209,7 +213,7 @@ def escape_shairport_string(value: str) -> str:
 
 def bluealsa_device(target: Target) -> str:
     """Return the ALSA device string for a target."""
-    return f"bluealsa:DEV={target.mac},PROFILE=a2dp,HCI={target.adapter}"
+    return f"bluealsa:DEV={target.mac}"
 
 
 def render_shairport_config(target: Target) -> str:
@@ -280,6 +284,7 @@ class AirBridgeManager:
 
     async def async_start(self) -> None:
         await self.async_stop(stop_monitor=False)
+        await self._stop_orphan_shairport_processes()
         self._write_configs()
         self.global_state = "running"
         self.global_error = None
@@ -438,6 +443,12 @@ class AirBridgeManager:
                 "computer. If it was paired before, press the Bluetooth forget "
                 "button, put the Echo in Bluetooth pairing mode, then press the "
                 "Bluetooth pair button."
+            )
+        if any(marker in output for marker in BLUETOOTH_PAIRING_FAILED_MARKERS):
+            return (
+                f"{status.target.airplay_name}: Bluetooth pairing did not complete. "
+                "Put the Echo in Bluetooth pairing mode, then press the Bluetooth "
+                "pair button in Home Assistant."
             )
         if status.connected and not status.bluealsa_ready:
             return (
@@ -628,6 +639,13 @@ class AirBridgeManager:
                     + self._format_recent_output_hint(status.recent_output)
                 ),
             )
+
+    async def _stop_orphan_shairport_processes(self) -> None:
+        if not shutil.which("pkill"):
+            return
+        for target in self.config.targets:
+            pattern = re.escape(str(self._config_path(target)))
+            await self._run(["pkill", "-f", pattern], timeout=5, allow_missing=True)
 
     async def _stop_shairport(self, target: Target) -> None:
         process = self._shairport_processes.pop(target.id, None)

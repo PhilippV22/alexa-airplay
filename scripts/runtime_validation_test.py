@@ -46,7 +46,7 @@ assert config.targets[0].udp_port_base == 20000
 
 rendered = runtime.render_shairport_config(config.targets[0])
 assert 'name = "Alexa-Airplay Wohnzimmer";' in rendered
-assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF,PROFILE=a2dp,HCI=hci0";' in rendered
+assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' in rendered
 
 manager = runtime.AirBridgeManager(
     str(ROOT / ".tmp-airbridge-test"),
@@ -71,6 +71,14 @@ manager.target_status("0").update(
     ),
 )
 assert "refusing the Bluetooth connection" in (manager.runtime_advice() or "")
+
+manager.target_status("0").update(
+    state="warning",
+    connected=False,
+    bluealsa_ready=False,
+    last_error="Bluetooth pairing failed. Put the Echo in Bluetooth pairing mode",
+)
+assert "pairing did not complete" in (manager.runtime_advice() or "")
 
 manager.target_status("0").update(
     state="warning",
