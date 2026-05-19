@@ -23,8 +23,20 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         for manager in hass.data.get(DOMAIN, {}).values():
             await manager.async_reconnect(target_id)
 
+    async def handle_pair(call: ServiceCall) -> None:
+        target_id = call.data.get("target_id")
+        for manager in hass.data.get(DOMAIN, {}).values():
+            await manager.async_pair(target_id)
+
+    async def handle_forget(call: ServiceCall) -> None:
+        target_id = call.data.get("target_id")
+        for manager in hass.data.get(DOMAIN, {}).values():
+            await manager.async_forget(target_id)
+
     hass.services.async_register(DOMAIN, "restart", handle_restart)
     hass.services.async_register(DOMAIN, "reconnect", handle_reconnect)
+    hass.services.async_register(DOMAIN, "pair", handle_pair)
+    hass.services.async_register(DOMAIN, "forget", handle_forget)
     return True
 
 

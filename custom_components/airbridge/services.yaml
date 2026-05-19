@@ -13,3 +13,27 @@ reconnect:
       example: "0"
       selector:
         text:
+
+pair:
+  name: Pair Alexa-Airplay target
+  description: Pair, trust and connect all targets or one target by target id.
+  fields:
+    target_id:
+      name: Target ID
+      description: Optional target id from the Alexa-Airplay status entity attributes.
+      required: false
+      example: "0"
+      selector:
+        text:
+
+forget:
+  name: Forget Alexa-Airplay target
+  description: Remove Bluetooth pairing for all targets or one target by target id.
+  fields:
+    target_id:
+      name: Target ID
+      description: Optional target id from the Alexa-Airplay status entity attributes.
+      required: false
+      example: "0"
+      selector:
+        text:

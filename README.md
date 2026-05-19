@@ -78,6 +78,28 @@ Advanced editing is still available in the integration options as Targets JSON:
 Put the Echo into Bluetooth pairing mode once before the first start. After
 that, Alexa-Airplay tries to trust and reconnect the device automatically.
 
+## Use from Home Assistant
+
+Alexa-Airplay exposes Home Assistant buttons so Bluetooth maintenance does not
+need a shell inside the container:
+
+- `Restart` restarts all Alexa-Airplay runtime processes.
+- `<AirPlay name> Bluetooth pair` pairs, trusts and connects one Echo.
+- `<AirPlay name> reconnect` reconnects one Echo and restarts its AirPlay
+  receiver if needed.
+- `<AirPlay name> Bluetooth forget` removes the local Bluetooth pairing for one
+  Echo.
+
+The same actions are available as services for dashboards and automations:
+`airbridge.restart`, `airbridge.pair`, `airbridge.reconnect` and
+`airbridge.forget`. The per-target services accept the optional `target_id`
+shown in the target status sensor attributes.
+
+If an Echo is visible in AirPlay but iPhone or Mac says the connection failed,
+open the Alexa-Airplay device in Home Assistant, press `Bluetooth forget`, put
+the Echo in Bluetooth pairing mode, then press `Bluetooth pair`. If the Echo was
+previously paired with a phone or computer, remove that old pairing there too.
+
 ## How it works
 
 For every enabled target, Alexa-Airplay writes a `shairport-sync` config under

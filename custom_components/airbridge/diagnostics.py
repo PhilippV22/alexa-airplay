@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_TARGETS, DOMAIN
+from .runtime import redact_mac_addresses
 
 
 async def async_get_config_entry_diagnostics(
@@ -23,5 +24,5 @@ async def async_get_config_entry_diagnostics(
     manager = hass.data.get(DOMAIN, {}).get(entry.entry_id)
     return {
         "config": data,
-        "runtime": manager.diagnostics() if manager else None,
+        "runtime": redact_mac_addresses(manager.diagnostics()) if manager else None,
     }

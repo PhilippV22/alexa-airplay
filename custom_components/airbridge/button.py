@@ -19,7 +19,14 @@ async def async_setup_entry(
     """Set up AirBridge buttons."""
     manager: AirBridgeManager = hass.data[DOMAIN][entry.entry_id]
     entities: list[ButtonEntity] = [AirBridgeRestartButton(manager)]
-    entities.extend(AirBridgeReconnectButton(manager, target_id) for target_id in manager.target_ids)
+    for target_id in manager.target_ids:
+        entities.extend(
+            (
+                AirBridgePairButton(manager, target_id),
+                AirBridgeReconnectButton(manager, target_id),
+                AirBridgeForgetButton(manager, target_id),
+            )
+        )
     async_add_entities(entities)
 
 
@@ -37,17 +44,50 @@ class AirBridgeRestartButton(ButtonEntity):
         await self._manager.async_restart()
 
 
-class AirBridgeReconnectButton(ButtonEntity):
-    """Reconnect one AirBridge target."""
+class AirBridgeTargetButton(ButtonEntity):
+    """Base class for one AirBridge target action."""
 
     _attr_has_entity_name = True
+    action_name = ""
+    unique_suffix = ""
 
     def __init__(self, manager: AirBridgeManager, target_id: str) -> None:
         self._manager = manager
         self._target_id = target_id
         target = manager.target(target_id)
-        self._attr_unique_id = f"airbridge_{target_id}_reconnect"
-        self._attr_name = f"{target.airplay_name} reconnect"
+        self._attr_unique_id = f"airbridge_{target_id}_{self.unique_suffix}"
+        self._attr_name = f"{target.airplay_name} {self.action_name}"
+
+    @property
+    def available(self) -> bool:
+        return self._manager.target(self._target_id).enabled
+
+
+class AirBridgePairButton(AirBridgeTargetButton):
+    """Pair, trust and connect one AirBridge target."""
+
+    action_name = "Bluetooth pair"
+    unique_suffix = "pair"
+
+    async def async_press(self) -> None:
+        await self._manager.async_pair(self._target_id)
+
+
+class AirBridgeReconnectButton(AirBridgeTargetButton):
+    """Reconnect one AirBridge target."""
+
+    action_name = "reconnect"
+    unique_suffix = "reconnect"
 
     async def async_press(self) -> None:
         await self._manager.async_reconnect(self._target_id)
+
+
+class AirBridgeForgetButton(AirBridgeTargetButton):
+    """Remove the Bluetooth pairing for one AirBridge target."""
+
+    action_name = "Bluetooth forget"
+    unique_suffix = "forget"
+
+    async def async_press(self) -> None:
+        await self._manager.async_forget(self._target_id)

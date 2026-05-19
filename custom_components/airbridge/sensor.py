@@ -84,6 +84,7 @@ class AirBridgeTargetStatusSensor(SensorEntity):
             "connected": status.connected,
             "airplay_ready": status.airplay_ready,
             "shairport_pid": status.shairport_pid,
+            "last_message": status.last_message,
             "last_error": status.last_error,
             "recent_output": status.recent_output[-10:],
             "updated_at": status.updated_at,

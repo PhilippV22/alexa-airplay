@@ -48,6 +48,38 @@ rendered = runtime.render_shairport_config(config.targets[0])
 assert 'name = "Alexa-Airplay Wohnzimmer";' in rendered
 assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' in rendered
 
+manager = runtime.AirBridgeManager(
+    str(ROOT / ".tmp-airbridge-test"),
+    base_options(
+        [
+            {
+                "name": "Wohnzimmer Echo",
+                "airplay_name": "Alexa-Airplay Wohnzimmer",
+                "mac": "aa:bb:cc:dd:ee:ff",
+                "enabled": True,
+            }
+        ]
+    ),
+)
+manager.command_paths = {cmd: "/usr/bin/true" for cmd in runtime.ALL_REQUIRED_COMMANDS}
+manager.target_status("0").update(
+    state="warning",
+    connected=False,
+    last_error=(
+        "hci0 AA:BB:CC:DD:EE:FF type BR/EDR connect failed "
+        "(status 0x0b, Rejected)"
+    ),
+)
+assert "refusing the Bluetooth connection" in (manager.runtime_advice() or "")
+
+redacted = runtime.redact_mac_addresses(
+    {"error": "Failed to connect AA:BB:CC:DD:EE:FF", "items": ["aa:bb:cc:dd:ee:01"]}
+)
+assert redacted == {
+    "error": "Failed to connect **REDACTED**",
+    "items": ["**REDACTED**"],
+}
+
 empty = runtime.build_config(base_options([]))
 assert empty.targets == ()
 
