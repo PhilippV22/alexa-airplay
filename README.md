@@ -107,7 +107,8 @@ means BlueALSA can open the A2DP audio output that AirPlay needs. Alexa-Airplay
 only keeps the AirPlay receiver active once both are true, so an Echo should no
 longer stay visible in AirPlay while its Bluetooth audio path is not ready.
 For reliability with BlueALSA, the generated Shairport Sync config uses
-software volume, 44.1 kHz, S16 output and disables mmap output.
+software volume, ignores AirPlay source volume, keeps hardware mute disabled,
+keeps the ALSA output awake, uses 44.1 kHz S16 output and disables mmap output.
 
 ## How it works
 

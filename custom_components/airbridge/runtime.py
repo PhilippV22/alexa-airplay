@@ -236,13 +236,15 @@ def render_shairport_config(target: Target) -> str:
         f"  port = {target.raop_port};\n"
         f"  udp_port_base = {target.udp_port_base};\n"
         "  udp_port_range = 10;\n"
+        '  ignore_volume_control = "yes";\n'
         "};\n\n"
         "alsa = {\n"
         f'  output_device = "{bluealsa_device(target)}";\n'
         "  output_rate = 44100;\n"
         '  output_format = "S16";\n'
         '  use_mmap_if_available = "no";\n'
-        '  mute_using_playback_switch = "no";\n'
+        '  use_hardware_mute_if_available = "no";\n'
+        '  disable_standby_mode = "always";\n'
         "};\n\n"
         "metadata = {\n"
         '  enabled = "no";\n'
@@ -640,10 +642,18 @@ class AirBridgeManager:
             self._record_dependency_error("shairport-sync not found; AirPlay receivers cannot start")
             return
 
-        process = await asyncio.create_subprocess_exec(
+        command = [
             "shairport-sync",
-            "-c",
-            str(self._config_path(target)),
+            "-u",
+        ]
+        if self.config.log_level == "debug":
+            command.append("-v")
+        elif self.config.log_level == "trace":
+            command.extend(("-v", "-v", "-v"))
+        command.extend(("-c", str(self._config_path(target))))
+
+        process = await asyncio.create_subprocess_exec(
+            *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )

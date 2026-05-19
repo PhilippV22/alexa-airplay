@@ -48,9 +48,13 @@ rendered = runtime.render_shairport_config(config.targets[0])
 assert 'name = "Alexa-Airplay Wohnzimmer";' in rendered
 assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' in rendered
 assert "mixer_control_name" not in rendered
+assert 'ignore_volume_control = "yes";' in rendered
 assert "output_rate = 44100;" in rendered
 assert 'output_format = "S16";' in rendered
 assert 'use_mmap_if_available = "no";' in rendered
+assert 'use_hardware_mute_if_available = "no";' in rendered
+assert 'disable_standby_mode = "always";' in rendered
+assert "mute_using_playback_switch" not in rendered
 
 manager = runtime.AirBridgeManager(
     str(ROOT / ".tmp-airbridge-test"),
