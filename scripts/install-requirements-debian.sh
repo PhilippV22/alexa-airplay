@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REQUIRED_COMMANDS=(shairport-sync bluetoothctl bluealsa bluealsa-aplay avahi-daemon)
+REQUIRED_COMMANDS=(shairport-sync bluetoothctl bluealsa bluealsa-aplay aplay avahi-daemon)
 
 log() {
   printf '[Alexa-Airplay] %s\n' "$*"
@@ -118,7 +118,7 @@ else
 fi
 
 missing=""
-for cmd in shairport-sync bluetoothctl bluealsa bluealsa-aplay avahi-daemon; do
+for cmd in shairport-sync bluetoothctl bluealsa bluealsa-aplay aplay avahi-daemon; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     missing="$missing $cmd"
   fi
@@ -167,7 +167,7 @@ check_container_commands() {
 
   docker exec "$container" sh -c '
 missing=""
-for cmd in shairport-sync bluetoothctl bluealsa bluealsa-aplay avahi-daemon; do
+for cmd in shairport-sync bluetoothctl bluealsa bluealsa-aplay aplay avahi-daemon; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     missing="$missing $cmd"
   fi

@@ -86,7 +86,7 @@ manager.target_status("0").update(
     bluealsa_ready=False,
     last_error="BlueALSA A2DP audio device is not ready",
 )
-assert "does not expose an A2DP audio output" in (manager.runtime_advice() or "")
+assert "cannot open the A2DP playback output" in (manager.runtime_advice() or "")
 
 redacted = runtime.redact_mac_addresses(
     {"error": "Failed to connect AA:BB:CC:DD:EE:FF", "items": ["aa:bb:cc:dd:ee:01"]}

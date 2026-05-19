@@ -26,6 +26,7 @@ inside the Home Assistant runtime:
 - `shairport-sync`
 - `bluealsa`
 - `bluealsa-aplay`
+- `aplay`
 - `bluetoothctl`
 - optional: `avahi-daemon` for AirPlay discovery
 
@@ -102,7 +103,7 @@ previously paired with a phone or computer, remove that old pairing there too.
 
 The target status sensor distinguishes plain Bluetooth from the usable audio
 path: `connected` means BlueZ is connected to the Echo, while `bluealsa_ready`
-means BlueALSA exposes the A2DP audio output that AirPlay needs. Alexa-Airplay
+means BlueALSA can open the A2DP audio output that AirPlay needs. Alexa-Airplay
 only keeps the AirPlay receiver active once both are true, so an Echo should no
 longer stay visible in AirPlay while its Bluetooth audio path is not ready.
 

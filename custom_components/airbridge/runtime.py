@@ -33,7 +33,7 @@ BLUEALSA_PCM_MISSING_MARKERS = (
 )
 AIRPLAY_REQUIRED_COMMANDS = ("shairport-sync", "bluealsa")
 DISCOVERY_REQUIRED_COMMANDS = ("avahi-daemon",)
-BLUETOOTH_REQUIRED_COMMANDS = ("bluetoothctl", "bluealsa-aplay")
+BLUETOOTH_REQUIRED_COMMANDS = ("bluetoothctl", "bluealsa-aplay", "aplay")
 ALL_REQUIRED_COMMANDS = (
     *AIRPLAY_REQUIRED_COMMANDS,
     *DISCOVERY_REQUIRED_COMMANDS,
@@ -453,7 +453,7 @@ class AirBridgeManager:
         if status.connected and not status.bluealsa_ready:
             return (
                 f"{status.target.airplay_name}: Bluetooth is connected, but BlueALSA "
-                "does not expose an A2DP audio output for this Echo yet. Press "
+                "cannot open the A2DP playback output for this Echo yet. Press "
                 "Bluetooth reconnect; if it still stays this way, press Bluetooth "
                 "forget, put the Echo in pairing mode, then press Bluetooth pair."
             )
@@ -519,8 +519,22 @@ class AirBridgeManager:
             return
 
         for target in enabled_targets:
-            await self._connect_target(target)
             status = self._target_statuses[target.id]
+            process = self._shairport_processes.get(target.id)
+            if (
+                process
+                and process.returncode is None
+                and status.connected
+                and status.bluealsa_ready
+            ):
+                status.update(
+                    state="running",
+                    airplay_ready=True,
+                    shairport_pid=process.pid,
+                )
+                continue
+
+            await self._connect_target(target)
             if status.connected and status.bluealsa_ready:
                 await self._ensure_shairport(target)
             else:
@@ -806,7 +820,7 @@ class AirBridgeManager:
             last_message="Bluetooth connected; waiting for BlueALSA audio",
             last_error=None,
         )
-        bluealsa_ready = await self._wait_for_bluealsa_pcm(target)
+        bluealsa_ready, bluealsa_error = await self._wait_for_bluealsa_playback(target)
         if not bluealsa_ready:
             status.update(
                 connected=True,
@@ -814,8 +828,9 @@ class AirBridgeManager:
                 state="warning",
                 last_message="Bluetooth connected",
                 last_error=(
-                    "BlueALSA A2DP audio device is not ready. The Echo is connected "
-                    "over Bluetooth, but no A2DP PCM is available for AirPlay audio."
+                    "BlueALSA A2DP playback is not ready. The Echo is connected "
+                    "over Bluetooth, but the ALSA playback device cannot be opened "
+                    f"for AirPlay audio: {bluealsa_error or 'unknown error'}"
                 ),
             )
             return
@@ -828,25 +843,45 @@ class AirBridgeManager:
             last_error=None,
         )
 
-    async def _wait_for_bluealsa_pcm(self, target: Target) -> bool:
+    async def _wait_for_bluealsa_playback(self, target: Target) -> tuple[bool, str | None]:
+        last_error: str | None = None
         for _ in range(8):
-            if await self._bluealsa_pcm_available(target):
-                return True
+            ready, error = await self._bluealsa_playback_available(target)
+            if ready:
+                return True, None
+            last_error = error
             await asyncio.sleep(1)
-        return False
+        return False, last_error
 
-    async def _bluealsa_pcm_available(self, target: Target) -> bool:
-        if not self.command_paths.get("bluealsa-aplay") and not shutil.which("bluealsa-aplay"):
-            return False
+    async def _bluealsa_playback_available(self, target: Target) -> tuple[bool, str | None]:
+        if not self.command_paths.get("aplay") and not shutil.which("aplay"):
+            return False, "aplay not found"
+
         result = await self._run(
-            ["bluealsa-aplay", "--list-pcms"],
-            timeout=10,
+            [
+                "aplay",
+                "-q",
+                "-D",
+                bluealsa_device(target),
+                "-f",
+                "S16_LE",
+                "-c",
+                "2",
+                "-r",
+                "44100",
+                "-t",
+                "raw",
+                "-d",
+                "1",
+                "/dev/zero",
+            ],
+            timeout=5,
             allow_missing=True,
         )
-        if result[0] != 0:
-            return False
-        output = result[1].upper()
-        return target.mac in output and "PROFILE=A2DP" in output
+        output = result[1].strip()
+        if result[0] == 0:
+            return True, None
+        return False, output or f"aplay exited with code {result[0]}"
 
     async def _bluealsa_service_available(self) -> bool:
         if not self.command_paths.get("bluealsa-aplay") and not shutil.which("bluealsa-aplay"):
