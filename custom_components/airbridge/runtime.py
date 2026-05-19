@@ -239,7 +239,10 @@ def render_shairport_config(target: Target) -> str:
         "};\n\n"
         "alsa = {\n"
         f'  output_device = "{bluealsa_device(target)}";\n'
-        '  mixer_control_name = "";\n'
+        "  output_rate = 44100;\n"
+        '  output_format = "S16";\n'
+        '  use_mmap_if_available = "no";\n'
+        '  mute_using_playback_switch = "no";\n'
         "};\n\n"
         "metadata = {\n"
         '  enabled = "no";\n'

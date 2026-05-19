@@ -47,6 +47,10 @@ assert config.targets[0].udp_port_base == 20000
 rendered = runtime.render_shairport_config(config.targets[0])
 assert 'name = "Alexa-Airplay Wohnzimmer";' in rendered
 assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' in rendered
+assert "mixer_control_name" not in rendered
+assert "output_rate = 44100;" in rendered
+assert 'output_format = "S16";' in rendered
+assert 'use_mmap_if_available = "no";' in rendered
 
 manager = runtime.AirBridgeManager(
     str(ROOT / ".tmp-airbridge-test"),
