@@ -87,7 +87,7 @@ need a shell inside the container:
 - `Restart` restarts all Alexa-Airplay runtime processes.
 - `<AirPlay name> Bluetooth pair` pairs, trusts and connects one Echo.
 - `<AirPlay name> reconnect` reconnects one Echo and restarts its AirPlay
-  receiver if needed.
+  receiver if needed. It does not start a new pairing session.
 - `<AirPlay name> Bluetooth forget` removes the local Bluetooth pairing for one
   Echo.
 

@@ -95,6 +95,10 @@ assert redacted == {
     "error": "Failed to connect **REDACTED**",
     "items": ["**REDACTED**"],
 }
+assert (
+    runtime.clean_command_output("\x1b[0;94m[prompt]> \x1b[0mpair X\r\n")
+    == "[prompt]> pair X"
+)
 
 empty = runtime.build_config(base_options([]))
 assert empty.targets == ()

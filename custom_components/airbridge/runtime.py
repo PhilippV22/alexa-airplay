@@ -14,6 +14,7 @@ from typing import Any, Awaitable, Callable
 
 MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
 MAC_IN_TEXT_RE = re.compile(r"\b(?:[0-9A-F]{2}:){5}[0-9A-F]{2}\b", re.IGNORECASE)
+ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 LOG_LEVELS = {"trace", "debug", "info", "warning", "error"}
 BLUETOOTH_REFUSED_MARKERS = (
     "br-connection-refused",
@@ -22,6 +23,7 @@ BLUETOOTH_REFUSED_MARKERS = (
 )
 BLUETOOTH_PAIRING_FAILED_MARKERS = (
     "bluetooth pairing failed",
+    "bluetooth target is not paired",
     "failed to pair",
 )
 BLUEALSA_PCM_MISSING_MARKERS = (
@@ -127,6 +129,14 @@ def redact_mac_addresses(value: object) -> object:
     if isinstance(value, dict):
         return {key: redact_mac_addresses(item) for key, item in value.items()}
     return value
+
+
+def clean_command_output(value: str) -> str:
+    """Clean terminal control characters from command output."""
+    text = ANSI_ESCAPE_RE.sub("", value)
+    text = text.replace("\r", "\n").replace("\b", "")
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
 
 def validate_port(value: int, name: str) -> None:
@@ -760,23 +770,19 @@ class AirBridgeManager:
 
         info = await self._bluetooth_info(target.mac)
         if "Paired: yes" not in info:
-            pair_output = await self._bluetooth_batch([f"pair {target.mac}"], timeout=35)
-            info = await self._bluetooth_info(target.mac)
-            if "Paired: yes" not in info:
-                status.update(
-                    connected=False,
-                    bluealsa_ready=False,
-                    state="warning",
-                    last_message=None,
-                    last_error=(
-                        "Bluetooth pairing failed. Put the Echo in Bluetooth pairing "
-                        "mode and press Bluetooth pair"
-                        + self._format_recent_output_hint([pair_output.strip()])
-                    ),
-                )
-                return
+            status.update(
+                connected=False,
+                bluealsa_ready=False,
+                state="warning",
+                last_message=None,
+                last_error=(
+                    "Bluetooth target is not paired. Put the Echo in Bluetooth "
+                    "pairing mode, then press Bluetooth pair in Home Assistant."
+                ),
+            )
+            return
 
-        await self._bluetooth_batch([f"trust {target.mac}"], timeout=10)
+        await self._trust_target(target)
         info = await self._bluetooth_info(target.mac)
         if "Connected: yes" in info:
             await self._mark_target_connected(target)
@@ -808,7 +814,7 @@ class AirBridgeManager:
             bluealsa_ready=False,
             state="warning",
             last_message=None,
-            last_error=output.strip() or "Bluetooth connect failed",
+            last_error=clean_command_output(output) or "Bluetooth connect failed",
         )
 
     async def _mark_target_connected(self, target: Target) -> None:
@@ -845,7 +851,7 @@ class AirBridgeManager:
 
     async def _wait_for_bluealsa_playback(self, target: Target) -> tuple[bool, str | None]:
         last_error: str | None = None
-        for _ in range(8):
+        for _ in range(5):
             ready, error = await self._bluealsa_playback_available(target)
             if ready:
                 return True, None
@@ -875,10 +881,10 @@ class AirBridgeManager:
                 "1",
                 "/dev/zero",
             ],
-            timeout=5,
+            timeout=4,
             allow_missing=True,
         )
-        output = result[1].strip()
+        output = clean_command_output(result[1])
         if result[0] == 0:
             return True, None
         return False, output or f"aplay exited with code {result[0]}"
@@ -904,9 +910,34 @@ class AirBridgeManager:
         )
         self._notify()
 
-        pair_output = await self._bluetooth_batch([f"pair {target.mac}"], timeout=45)
         info = await self._bluetooth_info(target.mac)
         if "Paired: yes" not in info:
+            await self._run(
+                ["bluetoothctl", "disconnect", target.mac],
+                timeout=10,
+                allow_missing=True,
+            )
+            await self._run(
+                ["bluetoothctl", "remove", target.mac],
+                timeout=15,
+                allow_missing=True,
+            )
+            await self._run(
+                ["bluetoothctl", "--timeout", "8", "scan", "on"],
+                timeout=12,
+                allow_missing=True,
+            )
+            pair_result = await self._run(
+                ["bluetoothctl", "pair", target.mac],
+                timeout=60,
+                allow_missing=True,
+            )
+            paired = await self._wait_until_paired(target)
+        else:
+            pair_result = (0, "Already paired")
+            paired = True
+
+        if not paired:
             status.update(
                 connected=False,
                 bluealsa_ready=False,
@@ -915,12 +946,12 @@ class AirBridgeManager:
                 last_error=(
                     "Bluetooth pairing failed. Put the Echo in Bluetooth pairing "
                     "mode, then press Bluetooth pair"
-                    + self._format_recent_output_hint([pair_output.strip()])
+                    + self._format_recent_output_hint([clean_command_output(pair_result[1])])
                 ),
             )
             return
 
-        await self._bluetooth_batch([f"trust {target.mac}"], timeout=10)
+        await self._trust_target(target)
         status.update(
             state="paired",
             last_message="Bluetooth paired and trusted",
@@ -931,6 +962,25 @@ class AirBridgeManager:
             await self._ensure_shairport(target)
         else:
             await self._stop_shairport(target)
+
+    async def _wait_until_paired(self, target: Target) -> bool:
+        for _ in range(15):
+            info = await self._bluetooth_info(target.mac)
+            if "Paired: yes" in info:
+                return True
+            await asyncio.sleep(2)
+        return False
+
+    async def _trust_target(self, target: Target) -> None:
+        result = await self._run(["bluetoothctl", "trust", target.mac], timeout=10)
+        if result[0] != 0 and "trust succeeded" not in result[1].lower():
+            self._target_statuses[target.id].update(
+                state="warning",
+                last_error=(
+                    "Bluetooth trust failed"
+                    + self._format_recent_output_hint([clean_command_output(result[1])])
+                ),
+            )
 
     async def _forget_target(self, target: Target) -> None:
         status = self._target_statuses[target.id]
@@ -962,7 +1012,7 @@ class AirBridgeManager:
                 last_message=None,
                 last_error=(
                     "Bluetooth pairing could not be removed"
-                    + self._format_recent_output_hint([result[1].strip()])
+                    + self._format_recent_output_hint([clean_command_output(result[1])])
                 ),
             )
             return
