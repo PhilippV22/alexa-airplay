@@ -100,6 +100,7 @@ class TargetRuntimeStatus:
     state: str = "disabled"
     connected: bool = False
     bluealsa_ready: bool = False
+    bluealsa_recovery_attempted: bool = False
     airplay_ready: bool = False
     shairport_pid: int | None = None
     last_message: str | None = None
@@ -295,6 +296,7 @@ class AirBridgeManager:
     async def async_start(self) -> None:
         await self.async_stop(stop_monitor=False)
         await self._stop_orphan_shairport_processes()
+        await self._stop_orphan_bluealsa_processes()
         self._write_configs()
         self.global_state = "running"
         self.global_error = None
@@ -315,6 +317,7 @@ class AirBridgeManager:
 
         await self._ensure_bluealsa()
         for target in targets:
+            self._target_statuses[target.id].bluealsa_recovery_attempted = False
             await self._run_target_action(
                 target,
                 "Bluetooth reconnect",
@@ -335,6 +338,7 @@ class AirBridgeManager:
 
         await self._ensure_bluealsa()
         for target in targets:
+            self._target_statuses[target.id].bluealsa_recovery_attempted = False
             await self._run_target_action(
                 target,
                 "Bluetooth pair",
@@ -397,6 +401,7 @@ class AirBridgeManager:
                     "state": status.state,
                     "connected": status.connected,
                     "bluealsa_ready": status.bluealsa_ready,
+                    "bluealsa_recovery_attempted": status.bluealsa_recovery_attempted,
                     "airplay_ready": status.airplay_ready,
                     "shairport_pid": status.shairport_pid,
                     "last_message": status.last_message,
@@ -566,7 +571,10 @@ class AirBridgeManager:
             allow_missing=True,
         )
 
-    async def _ensure_bluealsa(self) -> None:
+    async def _ensure_bluealsa(self, force_restart: bool = False) -> None:
+        if force_restart and self._bluealsa_process:
+            await self._stop_process(self._bluealsa_process)
+            self._bluealsa_process = None
         if self._bluealsa_process and self._bluealsa_process.returncode is None:
             return
         if not self.command_paths.get("bluealsa"):
@@ -575,6 +583,7 @@ class AirBridgeManager:
         self._bluealsa_process = await asyncio.create_subprocess_exec(
             "bluealsa",
             "--profile=a2dp-source",
+            f"--device={self.config.adapter}",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
@@ -670,6 +679,11 @@ class AirBridgeManager:
         for target in self.config.targets:
             pattern = re.escape(str(self._config_path(target)))
             await self._run(["pkill", "-f", pattern], timeout=5, allow_missing=True)
+
+    async def _stop_orphan_bluealsa_processes(self) -> None:
+        if not shutil.which("pkill"):
+            return
+        await self._run(["pkill", "-x", "bluealsa"], timeout=5, allow_missing=True)
 
     async def _stop_shairport(self, target: Target) -> None:
         process = self._shairport_processes.pop(target.id, None)
@@ -827,6 +841,12 @@ class AirBridgeManager:
             last_error=None,
         )
         bluealsa_ready, bluealsa_error = await self._wait_for_bluealsa_playback(target)
+        if not bluealsa_ready and not status.bluealsa_recovery_attempted:
+            status.bluealsa_recovery_attempted = True
+            recovered = await self._recover_bluealsa_playback(target, bluealsa_error)
+            if recovered:
+                bluealsa_ready, bluealsa_error = await self._wait_for_bluealsa_playback(target)
+
         if not bluealsa_ready:
             status.update(
                 connected=True,
@@ -844,10 +864,63 @@ class AirBridgeManager:
         status.update(
             connected=True,
             bluealsa_ready=True,
+            bluealsa_recovery_attempted=False,
             state="running" if status.airplay_ready else "warning",
             last_message="Bluetooth audio ready",
             last_error=None,
         )
+
+    async def _recover_bluealsa_playback(self, target: Target, reason: str | None) -> bool:
+        status = self._target_statuses[target.id]
+        status.update(
+            connected=False,
+            bluealsa_ready=False,
+            state="warning",
+            last_message="Restarting BlueALSA audio",
+            last_error=(
+                "BlueALSA playback was not ready"
+                + self._format_recent_output_hint([reason or "unknown error"])
+            ),
+        )
+        self._notify()
+
+        await self._stop_shairport(target)
+        await self._run(
+            ["bluetoothctl", "disconnect", target.mac],
+            timeout=10,
+            allow_missing=True,
+        )
+        await self._stop_orphan_bluealsa_processes()
+        await self._ensure_bluealsa(force_restart=True)
+        await asyncio.sleep(1)
+
+        result = await self._run(["bluetoothctl", "connect", target.mac], timeout=25)
+        output = clean_command_output(result[1])
+        if result[0] != 0 and not (
+            "Connection successful" in result[1]
+            or "AlreadyConnected" in result[1]
+            or "Already connected" in result[1]
+        ):
+            status.update(
+                connected=False,
+                bluealsa_ready=False,
+                state="warning",
+                last_message=None,
+                last_error=(
+                    "Bluetooth reconnect after BlueALSA restart failed"
+                    + self._format_recent_output_hint([output])
+                ),
+            )
+            return False
+
+        status.update(
+            connected=True,
+            bluealsa_ready=False,
+            state="warning",
+            last_message="Bluetooth reconnected; waiting for BlueALSA audio",
+            last_error=None,
+        )
+        return True
 
     async def _wait_for_bluealsa_playback(self, target: Target) -> tuple[bool, str | None]:
         last_error: str | None = None
