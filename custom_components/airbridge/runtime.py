@@ -237,14 +237,23 @@ def render_shairport_config(target: Target) -> str:
         f"  udp_port_base = {target.udp_port_base};\n"
         "  udp_port_range = 10;\n"
         '  ignore_volume_control = "yes";\n'
+        "  volume_max_db = -6.0;\n"
+        "  volume_range_db = 60;\n"
+        "  drift_tolerance_in_seconds = 0.010;\n"
+        "  resync_threshold_in_seconds = 0.250;\n"
+        "  audio_backend_buffer_desired_length_in_seconds = 0.500;\n"
+        "  audio_backend_buffer_interpolation_threshold_in_seconds = 0.250;\n"
+        "  audio_backend_silent_lead_in_time = 1.000;\n"
         "};\n\n"
         "alsa = {\n"
         f'  output_device = "{bluealsa_device(target)}";\n'
         "  output_rate = 44100;\n"
         '  output_format = "S16";\n'
+        "  period_size = 2048;\n"
+        "  buffer_size = 16384;\n"
         '  use_mmap_if_available = "no";\n'
         '  use_hardware_mute_if_available = "no";\n'
-        '  disable_standby_mode = "always";\n'
+        '  disable_standby_mode = "auto";\n'
         "};\n\n"
         "metadata = {\n"
         '  enabled = "no";\n'
@@ -270,6 +279,7 @@ class AirBridgeManager:
         self._listeners: set[Callable[[], None]] = set()
         self._monitor_task: asyncio.Task | None = None
         self._bluealsa_process: asyncio.subprocess.Process | None = None
+        self._bluealsa_help: str | None = None
         self._shairport_processes: dict[str, asyncio.subprocess.Process] = {}
         self._shairport_log_tasks: dict[str, asyncio.Task] = {}
         self._target_statuses = {
@@ -585,10 +595,9 @@ class AirBridgeManager:
         if not self.command_paths.get("bluealsa"):
             self._record_dependency_error("bluealsa not found; Bluetooth audio output cannot start")
             return
+        command = await self._bluealsa_command()
         self._bluealsa_process = await asyncio.create_subprocess_exec(
-            "bluealsa",
-            "--profile=a2dp-source",
-            f"--device={self.config.adapter}",
+            *command,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
@@ -599,6 +608,34 @@ class AirBridgeManager:
                 self._record_dependency_error(
                     "bluealsa exited immediately; Bluetooth audio output cannot start"
                 )
+
+    async def _bluealsa_command(self) -> list[str]:
+        """Return a BlueALSA command tuned for stable Echo A2DP playback."""
+        command = [
+            "bluealsa",
+            "--profile=a2dp-source",
+            f"--device={self.config.adapter}",
+        ]
+        optional_args = (
+            ("--keep-alive", "--keep-alive=5"),
+            ("--a2dp-force-audio-cd", "--a2dp-force-audio-cd"),
+            ("--sbc-quality", "--sbc-quality=high"),
+        )
+        for marker, argument in optional_args:
+            if await self._bluealsa_supports(marker):
+                command.append(argument)
+        if await self._bluealsa_supports("--codec") and "aac" in (
+            self._bluealsa_help or ""
+        ).lower():
+            command.append("--codec=-aac")
+        return command
+
+    async def _bluealsa_supports(self, option: str) -> bool:
+        """Return whether the installed BlueALSA exposes an optional argument."""
+        if self._bluealsa_help is None:
+            result = await self._run(["bluealsa", "--help"], timeout=5, allow_missing=True)
+            self._bluealsa_help = result[1]
+        return option in self._bluealsa_help
 
     async def _prepare_adapter(self) -> None:
         if not self._dbus_available():

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
@@ -49,11 +50,17 @@ assert 'name = "Alexa-Airplay Wohnzimmer";' in rendered
 assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' in rendered
 assert "mixer_control_name" not in rendered
 assert 'ignore_volume_control = "yes";' in rendered
+assert "volume_max_db = -6.0;" in rendered
+assert "drift_tolerance_in_seconds = 0.010;" in rendered
+assert "resync_threshold_in_seconds = 0.250;" in rendered
+assert "audio_backend_buffer_desired_length_in_seconds = 0.500;" in rendered
 assert "output_rate = 44100;" in rendered
 assert 'output_format = "S16";' in rendered
+assert "period_size = 2048;" in rendered
+assert "buffer_size = 16384;" in rendered
 assert 'use_mmap_if_available = "no";' in rendered
 assert 'use_hardware_mute_if_available = "no";' in rendered
-assert 'disable_standby_mode = "always";' in rendered
+assert 'disable_standby_mode = "auto";' in rendered
 assert "mute_using_playback_switch" not in rendered
 
 manager = runtime.AirBridgeManager(
@@ -69,6 +76,15 @@ manager = runtime.AirBridgeManager(
         ]
     ),
 )
+manager._bluealsa_help = (  # noqa: SLF001 - direct test fixture setup
+    "--keep-alive --a2dp-force-audio-cd --sbc-quality --codec "
+    "Available BT audio codecs: SBC AAC"
+)
+bluealsa_command = asyncio.run(manager._bluealsa_command())  # noqa: SLF001
+assert "--keep-alive=5" in bluealsa_command
+assert "--a2dp-force-audio-cd" in bluealsa_command
+assert "--sbc-quality=high" in bluealsa_command
+assert "--codec=-aac" in bluealsa_command
 manager.command_paths = {cmd: "/usr/bin/true" for cmd in runtime.ALL_REQUIRED_COMMANDS}
 manager.target_status("0").update(
     state="warning",
