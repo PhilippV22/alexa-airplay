@@ -1,17 +1,52 @@
-# Alexa-Airplay
-
 <p align="center">
   <img src="custom_components/airbridge/brand/logo.png" alt="Alexa-Airplay logo" width="320">
 </p>
 
-Alexa-Airplay is a HACS-installable Home Assistant custom integration that starts
-one AirPlay receiver per configured Echo and forwards audio to that Echo over
-Bluetooth A2DP.
+<h1 align="center">Alexa-Airplay</h1>
+
+<p align="center">
+  <strong>AirPlay receivers for Amazon Echo speakers, managed from Home Assistant.</strong>
+</p>
+
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=PhilippV22&repository=alexa-airplay&category=integration">
+    <img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open in HACS">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/PhilippV22/alexa-airplay/releases">
+    <img src="https://img.shields.io/github/v/tag/PhilippV22/alexa-airplay?style=for-the-badge&label=version" alt="Latest version">
+  </a>
+  <img src="https://img.shields.io/badge/Home%20Assistant-2024.8%2B-41BDF5?style=for-the-badge" alt="Home Assistant 2024.8+">
+  <img src="https://img.shields.io/badge/HACS-Custom-41BDF5?style=for-the-badge" alt="HACS custom repository">
+  <img src="https://img.shields.io/badge/Install-Local%20Push-6A4CFF?style=for-the-badge" alt="Local push integration">
+</p>
+
+Alexa-Airplay is a HACS-installable Home Assistant custom integration that turns
+Amazon Echo speakers into AirPlay targets. It starts one AirPlay receiver per
+configured Echo, connects the Echo over Bluetooth A2DP and keeps the whole flow
+controllable from the Home Assistant UI.
+
+## Highlights
+
+- One AirPlay target per Echo, each with its own friendly AirPlay name.
+- Home Assistant buttons for Bluetooth pair, reconnect, forget and runtime restart.
+- Runtime sensors with clear diagnostics for Bluetooth, BlueALSA and AirPlay state.
+- Container-friendly dependency installer for Shairport Sync, BlueALSA, BlueZ,
+  Avahi and ALSA tools.
+- Pipe-based audio path designed to avoid Shairport Sync underruns against
+  Bluetooth's variable latency.
+- AirPlay source volume follows Apple Music, iPhone, iPad and Mac volume changes.
 
 ## Install
 
+### HACS
+
+Click the button above to open this repository in HACS, or add it manually:
+
 1. Open HACS.
-2. Add this repository as a custom repository.
+2. Add `https://github.com/PhilippV22/alexa-airplay` as a custom repository.
 3. Select category `Integration`.
 4. Download `Alexa-Airplay`.
 5. Restart Home Assistant.
@@ -55,7 +90,7 @@ usually `/run/dbus:/run/dbus:ro`.
 
 ## Configure
 
-The setup flow is guided:
+The setup flow is guided and can be completed from the Home Assistant UI:
 
 1. Set runtime defaults like Bluetooth adapter and AirPlay base ports.
 2. Put the Echo in Bluetooth pairing mode.
@@ -134,6 +169,12 @@ If you only see an old AirPlay receiver named `server`, that is usually the
 package default `shairport-sync` service on the host. Re-run the requirements
 one-liner; it disables that default service so only the Alexa-Airplay target
 names are advertised.
+
+## Project Notes
+
+Alexa-Airplay is a community project and is not affiliated with Apple, Amazon,
+Home Assistant or HACS. AirPlay, Alexa, Echo and Home Assistant are trademarks
+of their respective owners.
 
 ## Validate Locally
 
