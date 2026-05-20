@@ -45,13 +45,10 @@ assert config.targets[0].mac == "AA:BB:CC:DD:EE:FF"
 assert config.targets[0].raop_port == 5500
 assert config.targets[0].udp_port_base == 20000
 
-rendered = runtime.render_shairport_config(
-    config.targets[0],
-    "/config/airbridge/target_0.pcm",
-)
+rendered = runtime.render_shairport_config(config.targets[0])
 assert 'name = "Alexa-Airplay Wohnzimmer";' in rendered
-assert 'output_backend = "pipe";' in rendered
-assert 'name = "/config/airbridge/target_0.pcm";' in rendered
+assert 'output_backend = "stdout";' in rendered
+assert "pipe =" not in rendered
 assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' not in rendered
 assert "mixer_control_name" not in rendered
 assert 'ignore_volume_control = "no";' in rendered
@@ -59,9 +56,9 @@ assert 'volume_control_profile = "flat";' in rendered
 assert "volume_max_db = 0.0;" in rendered
 assert "volume_range_db = 30;" in rendered
 assert "audio_backend_buffer_desired_length_in_seconds = 1.500;" in rendered
-assert "output_rate = 44100;" in rendered
-assert 'output_format = "S16_LE";' in rendered
-assert "output_channels = 2;" in rendered
+assert "output_rate" not in rendered
+assert "output_format" not in rendered
+assert "output_channels" not in rendered
 assert 'disable_synchronization = "yes";' not in rendered
 assert 'use_precision_timing = "no";' not in rendered
 assert "period_size" not in rendered
