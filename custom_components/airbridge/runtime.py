@@ -103,6 +103,7 @@ class TargetRuntimeStatus:
     bluealsa_recovery_attempted: bool = False
     airplay_ready: bool = False
     shairport_pid: int | None = None
+    audio_pid: int | None = None
     last_message: str | None = None
     last_error: str | None = None
     recent_output: list[str] = field(default_factory=list)
@@ -227,12 +228,13 @@ def bluealsa_device(target: Target) -> str:
     return f"bluealsa:DEV={target.mac}"
 
 
-def render_shairport_config(target: Target) -> str:
+def render_shairport_config(target: Target, pipe_path: str | None = None) -> str:
     """Render shairport-sync config for one target."""
+    pipe_path = pipe_path or f"/tmp/airbridge_target_{target.id}.pcm"
     return (
         "general = {\n"
         f'  name = "{escape_shairport_string(target.airplay_name)}";\n'
-        '  output_backend = "alsa";\n'
+        '  output_backend = "pipe";\n'
         f"  port = {target.raop_port};\n"
         f"  udp_port_base = {target.udp_port_base};\n"
         "  udp_port_range = 10;\n"
@@ -243,18 +245,11 @@ def render_shairport_config(target: Target) -> str:
         "  audio_backend_buffer_interpolation_threshold_in_seconds = 0.750;\n"
         "  audio_backend_silent_lead_in_time = 1.500;\n"
         "};\n\n"
-        "alsa = {\n"
-        f'  output_device = "{bluealsa_device(target)}";\n'
-        '  output_rate = "auto";\n'
-        '  output_format = "auto";\n'
-        '  output_channels = "auto";\n'
-        '  disable_synchronization = "yes";\n'
-        '  use_precision_timing = "no";\n'
-        "  period_size = 4096;\n"
-        "  buffer_size = 88200;\n"
-        '  use_mmap_if_available = "no";\n'
-        '  use_hardware_mute_if_available = "no";\n'
-        '  disable_standby_mode = "auto";\n'
+        "pipe = {\n"
+        f'  name = "{escape_shairport_string(pipe_path)}";\n'
+        "  output_rate = 44100;\n"
+        '  output_format = "S16_LE";\n'
+        "  output_channels = 2;\n"
         "};\n\n"
         "metadata = {\n"
         '  enabled = "no";\n'
@@ -281,6 +276,8 @@ class AirBridgeManager:
         self._monitor_task: asyncio.Task | None = None
         self._bluealsa_process: asyncio.subprocess.Process | None = None
         self._bluealsa_help: str | None = None
+        self._audio_processes: dict[str, asyncio.subprocess.Process] = {}
+        self._audio_log_tasks: dict[str, asyncio.Task] = {}
         self._shairport_processes: dict[str, asyncio.subprocess.Process] = {}
         self._shairport_log_tasks: dict[str, asyncio.Task] = {}
         self._target_statuses = {
@@ -312,6 +309,7 @@ class AirBridgeManager:
     async def async_start(self) -> None:
         await self.async_stop(stop_monitor=False)
         await self._stop_orphan_shairport_processes()
+        await self._stop_orphan_audio_processes()
         await self._stop_orphan_bluealsa_processes()
         self._write_configs()
         self.global_state = "running"
@@ -398,6 +396,18 @@ class AirBridgeManager:
                 await task
         self._shairport_log_tasks.clear()
 
+        for process in list(self._audio_processes.values()):
+            await self._stop_process(process)
+        self._audio_processes.clear()
+        for task in list(self._audio_log_tasks.values()):
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        self._audio_log_tasks.clear()
+        for target in self.config.targets:
+            with contextlib.suppress(FileNotFoundError):
+                self._audio_pipe_path(target).unlink()
+
         if self._bluealsa_process:
             await self._stop_process(self._bluealsa_process)
             self._bluealsa_process = None
@@ -420,6 +430,7 @@ class AirBridgeManager:
                     "bluealsa_recovery_attempted": status.bluealsa_recovery_attempted,
                     "airplay_ready": status.airplay_ready,
                     "shairport_pid": status.shairport_pid,
+                    "audio_pid": status.audio_pid,
                     "last_message": status.last_message,
                     "last_error": status.last_error,
                     "recent_output": status.recent_output[-10:],
@@ -512,7 +523,10 @@ class AirBridgeManager:
             if not target.enabled:
                 continue
             config_path = self._config_path(target)
-            config_path.write_text(render_shairport_config(target), encoding="utf-8")
+            config_path.write_text(
+                render_shairport_config(target, str(self._audio_pipe_path(target))),
+                encoding="utf-8",
+            )
             self._target_statuses[target.id].update(
                 state="configured",
                 last_message="AirPlay receiver configured",
@@ -521,6 +535,9 @@ class AirBridgeManager:
 
     def _config_path(self, target: Target) -> Path:
         return self.runtime_dir / f"target_{target.id}.shairport-sync.conf"
+
+    def _audio_pipe_path(self, target: Target) -> Path:
+        return self.runtime_dir / f"target_{target.id}.pcm"
 
     async def _monitor_loop(self) -> None:
         while True:
@@ -552,9 +569,12 @@ class AirBridgeManager:
         for target in enabled_targets:
             status = self._target_statuses[target.id]
             process = self._shairport_processes.get(target.id)
+            audio_process = self._audio_processes.get(target.id)
             if (
                 process
                 and process.returncode is None
+                and audio_process
+                and audio_process.returncode is None
                 and status.connected
                 and status.bluealsa_ready
             ):
@@ -562,6 +582,7 @@ class AirBridgeManager:
                     state="running",
                     airplay_ready=True,
                     shairport_pid=process.pid,
+                    audio_pid=audio_process.pid,
                 )
                 continue
 
@@ -663,17 +684,29 @@ class AirBridgeManager:
                 state="warning",
                 airplay_ready=False,
                 shairport_pid=None,
+                audio_pid=None,
                 last_error="BlueALSA A2DP audio device is not ready",
             )
             return
         if process and process.returncode is None:
-            status.update(airplay_ready=True, shairport_pid=process.pid)
+            audio_process = self._audio_processes.get(target.id)
+            if audio_process and audio_process.returncode is None:
+                status.update(
+                    airplay_ready=True,
+                    shairport_pid=process.pid,
+                    audio_pid=audio_process.pid,
+                )
+                return
+            await self._stop_shairport(target)
+            process = None
+        if not await self._ensure_audio_pipe_player(target):
             return
         if not self.command_paths.get("shairport-sync"):
             status.update(
                 state="error",
                 airplay_ready=False,
                 shairport_pid=None,
+                audio_pid=None,
                 last_error="shairport-sync not found",
             )
             self._record_dependency_error("shairport-sync not found; AirPlay receivers cannot start")
@@ -704,6 +737,7 @@ class AirBridgeManager:
             updates: dict[str, object] = {
                 "airplay_ready": True,
                 "shairport_pid": process.pid,
+                "audio_pid": self._audio_processes[target.id].pid,
             }
             if status.connected:
                 updates.update(state="running", last_error=None)
@@ -717,11 +751,13 @@ class AirBridgeManager:
                 state="error",
                 airplay_ready=False,
                 shairport_pid=None,
+                audio_pid=None,
                 last_error=(
                     "shairport-sync exited immediately"
                     + self._format_recent_output_hint(status.recent_output)
                 ),
             )
+            await self._stop_target_audio(target)
 
     async def _stop_orphan_shairport_processes(self) -> None:
         if not shutil.which("pkill"):
@@ -730,10 +766,89 @@ class AirBridgeManager:
             pattern = re.escape(str(self._config_path(target)))
             await self._run(["pkill", "-f", pattern], timeout=5, allow_missing=True)
 
+    async def _stop_orphan_audio_processes(self) -> None:
+        has_pkill = shutil.which("pkill")
+        for target in self.config.targets:
+            pipe_path = self._audio_pipe_path(target)
+            if has_pkill:
+                pattern = re.escape(str(pipe_path))
+                await self._run(["pkill", "-f", pattern], timeout=5, allow_missing=True)
+            with contextlib.suppress(FileNotFoundError):
+                pipe_path.unlink()
+
     async def _stop_orphan_bluealsa_processes(self) -> None:
         if not shutil.which("pkill"):
             return
         await self._run(["pkill", "-x", "bluealsa"], timeout=5, allow_missing=True)
+
+    async def _ensure_audio_pipe_player(self, target: Target) -> bool:
+        process = self._audio_processes.get(target.id)
+        status = self._target_statuses[target.id]
+        if process and process.returncode is None:
+            status.update(audio_pid=process.pid)
+            return True
+
+        await self._stop_target_audio(target)
+        if not self.command_paths.get("aplay") and not shutil.which("aplay"):
+            status.update(
+                state="error",
+                airplay_ready=False,
+                shairport_pid=None,
+                audio_pid=None,
+                last_error="aplay not found",
+            )
+            return False
+
+        pipe_path = self._audio_pipe_path(target)
+        pipe_path.parent.mkdir(parents=True, exist_ok=True)
+        with contextlib.suppress(FileNotFoundError):
+            pipe_path.unlink()
+        os.mkfifo(pipe_path, 0o600)
+
+        process = await asyncio.create_subprocess_exec(
+            "aplay",
+            "-q",
+            "-D",
+            bluealsa_device(target),
+            "-f",
+            "S16_LE",
+            "-c",
+            "2",
+            "-r",
+            "44100",
+            "-t",
+            "raw",
+            str(pipe_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        self._audio_processes[target.id] = process
+        if process.stdout is not None:
+            self._audio_log_tasks[target.id] = asyncio.create_task(
+                self._capture_audio_output(target.id, process.stdout)
+            )
+
+        await asyncio.sleep(0.2)
+        if process.returncode is None:
+            status.update(
+                audio_pid=process.pid,
+                last_message="Bluetooth audio pipe ready",
+                last_error=None,
+            )
+            return True
+
+        status.update(
+            state="error",
+            airplay_ready=False,
+            shairport_pid=None,
+            audio_pid=None,
+            last_error=(
+                "aplay audio pipe exited immediately"
+                + self._format_recent_output_hint(status.recent_output)
+            ),
+        )
+        await self._stop_target_audio(target)
+        return False
 
     async def _stop_shairport(self, target: Target) -> None:
         process = self._shairport_processes.pop(target.id, None)
@@ -744,10 +859,24 @@ class AirBridgeManager:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        await self._stop_target_audio(target)
         self._target_statuses[target.id].update(
             airplay_ready=False,
             shairport_pid=None,
+            audio_pid=None,
         )
+
+    async def _stop_target_audio(self, target: Target) -> None:
+        process = self._audio_processes.pop(target.id, None)
+        if process is not None:
+            await self._stop_process(process)
+        task = self._audio_log_tasks.pop(target.id, None)
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        with contextlib.suppress(FileNotFoundError):
+            self._audio_pipe_path(target).unlink()
 
     def _enabled_targets_for_action(self, target_id: str | None) -> list[Target]:
         targets = [
@@ -1224,12 +1353,50 @@ class AirBridgeManager:
                     last_message=None,
                     last_error="BlueALSA A2DP audio device is not ready",
                 )
+        await self._stop_target_audio(status.target)
         status.update(
             airplay_ready=False,
             shairport_pid=None,
+            audio_pid=None,
             state="warning" if status.target.enabled else "disabled",
         )
         self._notify()
+
+    async def _capture_audio_output(
+        self,
+        target_id: str,
+        stream: asyncio.StreamReader,
+    ) -> None:
+        status = self._target_statuses[target_id]
+        while line := await stream.readline():
+            text = line.decode(errors="replace").strip()
+            if not text:
+                continue
+            status.recent_output.append(text[-800:])
+            del status.recent_output[:-20]
+            lowered = text.lower()
+            if "underrun" in lowered or any(
+                marker in lowered for marker in BLUEALSA_PCM_MISSING_MARKERS
+            ):
+                status.update(
+                    airplay_ready=False,
+                    last_message=None,
+                    last_error=text[-800:],
+                )
+
+        if target_id in self._audio_processes:
+            self._audio_processes.pop(target_id, None)
+            self._audio_log_tasks.pop(target_id, None)
+            status.update(
+                audio_pid=None,
+                airplay_ready=False,
+                state="warning" if status.target.enabled else "disabled",
+                last_error=(
+                    "aplay audio pipe exited"
+                    + self._format_recent_output_hint(status.recent_output)
+                ),
+            )
+            self._notify()
 
     @staticmethod
     def _format_recent_output_hint(lines: list[str]) -> str:

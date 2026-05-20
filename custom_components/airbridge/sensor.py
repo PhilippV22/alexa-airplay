@@ -85,6 +85,7 @@ class AirBridgeTargetStatusSensor(SensorEntity):
             "bluealsa_ready": status.bluealsa_ready,
             "airplay_ready": status.airplay_ready,
             "shairport_pid": status.shairport_pid,
+            "audio_pid": status.audio_pid,
             "last_message": status.last_message,
             "last_error": status.last_error,
             "recent_output": status.recent_output[-10:],

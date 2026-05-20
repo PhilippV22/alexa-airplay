@@ -107,12 +107,12 @@ means BlueALSA can open the A2DP audio output that AirPlay needs. Alexa-Airplay
 only keeps the AirPlay receiver active once both are true, so an Echo should no
 longer stay visible in AirPlay while its Bluetooth audio path is not ready.
 For reliability with BlueALSA, the generated Shairport Sync config uses
-software volume, ignores AirPlay source volume, keeps hardware mute disabled,
-adds output headroom, uses a large ALSA buffer and disables Shairport Sync's
-strict output synchronization and precision timing for the Bluetooth PCM. This
-trades multi-room timing accuracy for cleaner Echo playback over variable
-Bluetooth latency. BlueALSA is started as an A2DP source with stable
-high-quality SBC where the installed BlueALSA version supports that option.
+software volume, ignores AirPlay source volume, adds output headroom and routes
+audio through Shairport Sync's raw PCM pipe backend. A dedicated `aplay` process
+feeds that PCM stream into BlueALSA, which
+avoids Shairport Sync's ALSA timing layer underrunning against Bluetooth's
+variable latency. BlueALSA is started as an A2DP source with stable high-quality
+SBC where the installed BlueALSA version supports that option.
 
 ## How it works
 

@@ -45,23 +45,28 @@ assert config.targets[0].mac == "AA:BB:CC:DD:EE:FF"
 assert config.targets[0].raop_port == 5500
 assert config.targets[0].udp_port_base == 20000
 
-rendered = runtime.render_shairport_config(config.targets[0])
+rendered = runtime.render_shairport_config(
+    config.targets[0],
+    "/config/airbridge/target_0.pcm",
+)
 assert 'name = "Alexa-Airplay Wohnzimmer";' in rendered
-assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' in rendered
+assert 'output_backend = "pipe";' in rendered
+assert 'name = "/config/airbridge/target_0.pcm";' in rendered
+assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' not in rendered
 assert "mixer_control_name" not in rendered
 assert 'ignore_volume_control = "yes";' in rendered
 assert "volume_max_db = -12.0;" in rendered
 assert "audio_backend_buffer_desired_length_in_seconds = 1.500;" in rendered
-assert 'output_rate = "auto";' in rendered
-assert 'output_format = "auto";' in rendered
-assert 'output_channels = "auto";' in rendered
-assert 'disable_synchronization = "yes";' in rendered
-assert 'use_precision_timing = "no";' in rendered
-assert "period_size = 4096;" in rendered
-assert "buffer_size = 88200;" in rendered
-assert 'use_mmap_if_available = "no";' in rendered
-assert 'use_hardware_mute_if_available = "no";' in rendered
-assert 'disable_standby_mode = "auto";' in rendered
+assert "output_rate = 44100;" in rendered
+assert 'output_format = "S16_LE";' in rendered
+assert "output_channels = 2;" in rendered
+assert 'disable_synchronization = "yes";' not in rendered
+assert 'use_precision_timing = "no";' not in rendered
+assert "period_size" not in rendered
+assert "buffer_size" not in rendered
+assert 'use_mmap_if_available = "no";' not in rendered
+assert 'use_hardware_mute_if_available = "no";' not in rendered
+assert 'disable_standby_mode = "auto";' not in rendered
 assert "mute_using_playback_switch" not in rendered
 
 manager = runtime.AirBridgeManager(
