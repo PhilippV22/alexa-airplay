@@ -50,14 +50,15 @@ assert 'name = "Alexa-Airplay Wohnzimmer";' in rendered
 assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' in rendered
 assert "mixer_control_name" not in rendered
 assert 'ignore_volume_control = "yes";' in rendered
-assert "volume_max_db = -6.0;" in rendered
-assert "drift_tolerance_in_seconds = 0.010;" in rendered
-assert "resync_threshold_in_seconds = 0.250;" in rendered
-assert "audio_backend_buffer_desired_length_in_seconds = 0.500;" in rendered
-assert "output_rate = 44100;" in rendered
-assert 'output_format = "S16";' in rendered
-assert "period_size = 2048;" in rendered
-assert "buffer_size = 16384;" in rendered
+assert "volume_max_db = -12.0;" in rendered
+assert "audio_backend_buffer_desired_length_in_seconds = 1.500;" in rendered
+assert 'output_rate = "auto";' in rendered
+assert 'output_format = "auto";' in rendered
+assert 'output_channels = "auto";' in rendered
+assert 'disable_synchronization = "yes";' in rendered
+assert 'use_precision_timing = "no";' in rendered
+assert "period_size = 4096;" in rendered
+assert "buffer_size = 88200;" in rendered
 assert 'use_mmap_if_available = "no";' in rendered
 assert 'use_hardware_mute_if_available = "no";' in rendered
 assert 'disable_standby_mode = "auto";' in rendered
@@ -82,7 +83,7 @@ manager._bluealsa_help = (  # noqa: SLF001 - direct test fixture setup
 )
 bluealsa_command = asyncio.run(manager._bluealsa_command())  # noqa: SLF001
 assert "--keep-alive=5" in bluealsa_command
-assert "--a2dp-force-audio-cd" in bluealsa_command
+assert "--a2dp-force-audio-cd" not in bluealsa_command
 assert "--sbc-quality=high" in bluealsa_command
 assert "--codec=-aac" in bluealsa_command
 manager.command_paths = {cmd: "/usr/bin/true" for cmd in runtime.ALL_REQUIRED_COMMANDS}

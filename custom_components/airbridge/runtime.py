@@ -237,20 +237,21 @@ def render_shairport_config(target: Target) -> str:
         f"  udp_port_base = {target.udp_port_base};\n"
         "  udp_port_range = 10;\n"
         '  ignore_volume_control = "yes";\n'
-        "  volume_max_db = -6.0;\n"
+        "  volume_max_db = -12.0;\n"
         "  volume_range_db = 60;\n"
-        "  drift_tolerance_in_seconds = 0.010;\n"
-        "  resync_threshold_in_seconds = 0.250;\n"
-        "  audio_backend_buffer_desired_length_in_seconds = 0.500;\n"
-        "  audio_backend_buffer_interpolation_threshold_in_seconds = 0.250;\n"
-        "  audio_backend_silent_lead_in_time = 1.000;\n"
+        "  audio_backend_buffer_desired_length_in_seconds = 1.500;\n"
+        "  audio_backend_buffer_interpolation_threshold_in_seconds = 0.750;\n"
+        "  audio_backend_silent_lead_in_time = 1.500;\n"
         "};\n\n"
         "alsa = {\n"
         f'  output_device = "{bluealsa_device(target)}";\n'
-        "  output_rate = 44100;\n"
-        '  output_format = "S16";\n'
-        "  period_size = 2048;\n"
-        "  buffer_size = 16384;\n"
+        '  output_rate = "auto";\n'
+        '  output_format = "auto";\n'
+        '  output_channels = "auto";\n'
+        '  disable_synchronization = "yes";\n'
+        '  use_precision_timing = "no";\n'
+        "  period_size = 4096;\n"
+        "  buffer_size = 88200;\n"
         '  use_mmap_if_available = "no";\n'
         '  use_hardware_mute_if_available = "no";\n'
         '  disable_standby_mode = "auto";\n'
@@ -618,7 +619,6 @@ class AirBridgeManager:
         ]
         optional_args = (
             ("--keep-alive", "--keep-alive=5"),
-            ("--a2dp-force-audio-cd", "--a2dp-force-audio-cd"),
             ("--sbc-quality", "--sbc-quality=high"),
         )
         for marker, argument in optional_args:

@@ -108,10 +108,11 @@ only keeps the AirPlay receiver active once both are true, so an Echo should no
 longer stay visible in AirPlay while its Bluetooth audio path is not ready.
 For reliability with BlueALSA, the generated Shairport Sync config uses
 software volume, ignores AirPlay source volume, keeps hardware mute disabled,
-adds output headroom, uses a larger ALSA buffer, keeps the ALSA output awake
-while active, uses 44.1 kHz S16 output and disables mmap output. BlueALSA is
-started as an A2DP source with 44.1 kHz CD audio and stable high-quality SBC
-where the installed BlueALSA version supports those options.
+adds output headroom, uses a large ALSA buffer and disables Shairport Sync's
+strict output synchronization and precision timing for the Bluetooth PCM. This
+trades multi-room timing accuracy for cleaner Echo playback over variable
+Bluetooth latency. BlueALSA is started as an A2DP source with stable
+high-quality SBC where the installed BlueALSA version supports that option.
 
 ## How it works
 
