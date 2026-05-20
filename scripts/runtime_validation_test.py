@@ -54,8 +54,10 @@ assert 'output_backend = "pipe";' in rendered
 assert 'name = "/config/airbridge/target_0.pcm";' in rendered
 assert 'output_device = "bluealsa:DEV=AA:BB:CC:DD:EE:FF";' not in rendered
 assert "mixer_control_name" not in rendered
-assert 'ignore_volume_control = "yes";' in rendered
-assert "volume_max_db = -12.0;" in rendered
+assert 'ignore_volume_control = "no";' in rendered
+assert 'volume_control_profile = "flat";' in rendered
+assert "volume_max_db = 0.0;" in rendered
+assert "volume_range_db = 30;" in rendered
 assert "audio_backend_buffer_desired_length_in_seconds = 1.500;" in rendered
 assert "output_rate = 44100;" in rendered
 assert 'output_format = "S16_LE";' in rendered
