@@ -76,6 +76,7 @@ class AirBridgeTargetStatusSensor(SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, object]:
         status = self._manager.target_status(self._target_id)
+        audio_pipe = self._manager.target_audio_pipe_path(self._target_id)
         return {
             "name": status.target.name,
             "airplay_name": status.target.airplay_name,
@@ -86,6 +87,8 @@ class AirBridgeTargetStatusSensor(SensorEntity):
             "airplay_ready": status.airplay_ready,
             "shairport_pid": status.shairport_pid,
             "audio_pid": status.audio_pid,
+            "audio_pipe": str(audio_pipe),
+            "audio_pipe_exists": audio_pipe.exists(),
             "last_message": status.last_message,
             "last_error": status.last_error,
             "recent_output": status.recent_output[-10:],
